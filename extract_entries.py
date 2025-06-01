@@ -1,124 +1,145 @@
-import fitz # PyMuPDF
+import fitz  # PyMuPDF
 import re
-
 import csv
-import io
 
 # Load the PDF
-# pdf_path = "data/LV_etimologijas_vardn.pdf"
 pdf_path = "data/Latviesu etimologijas vardnica (2001).pdf"
-
 doc = fitz.open(pdf_path)
 
-# Extract text from the first few pages for demonstration
-extracted_entries = []
+# Configuration
 allowed_chars_re = re.compile(r"[^a-zāčēģīķļņšūž\-–\[\]]", re.IGNORECASE)
-is_first_odd = True
 
-PAGE_OFFSET = 1 - 2
-
-PAGE_AMOUNT = 4
-# PAGE_AMOUNT = len(doc)
-
+PAGE_OFFSET = -3
 RANGE_START = 57
 RANGE_END = 1219
 
-entries = []
-words = set()
-current_entry = {"headword": "", "text": "", "page": 1 + PAGE_OFFSET}
+RANGE_START = 172
+RANGE_END = RANGE_START 
+
 
 page_range = range(RANGE_START - 1, RANGE_END)
 
-page_minimums = []
-for page_num in page_range:
 
-    print("Page: " + str(page_num + 1))
-    minimum = 10000
-    minimal_text = None
 
-    positions = []
 
-    page = doc.load_page(page_num)
-    blocks = page.get_text("dict")["blocks"]
+# Track processed headwords
+words = set()
+current_entry = {"headword": "", "text": "", "page": 1 + PAGE_OFFSET}
 
-    for block in blocks:
+# Open CSV file and temp output
+row_number = 1
+csv_file = open("entry_raw_data.csv", "w", encoding="utf-8", newline='')
+csv_writer = csv.writer(csv_file)
+csv_writer.writerow(["row_number", "headword", "page", "text"])  # Header
 
-        for line in block.get("lines", []):
-            for span in line.get("spans", []):
-
-                text = span["text"].strip()
-                x0 = span["bbox"][0]
-
-                positions.append(x0)
-
-                if x0 <= minimum:
-                    minimum = x0
-                    minimal_text = text
-
-    positions = sorted(positions)
-
-    jumps = []
-    for i in range(1, len(positions)):
-        if (positions[i] - positions[i - 1]) >= 5.5:
-            jumps.append(positions[i])
-
-    if len(jumps) > 1:
-        first_jump_x0 = jumps[0]
-    else:
-        first_jump_x0 = -1
-
-    print("Page minimum (" + str(page_num + 1) + ") " + str(first_jump_x0))
-    page_minimums.append(first_jump_x0 - 2)
-
-with open("temp_results.txt", "w") as f:
+with open("temp_results.txt", "w", encoding="utf-8") as f:
 
     for page_num in page_range:
 
-        print("Processing page: " + str(page_num + 1) + "/" + str(PAGE_AMOUNT))
-
+        print("\nPage: " + str(page_num + PAGE_OFFSET))
         page = doc.load_page(page_num)
         blocks = page.get_text("dict")["blocks"]
 
+        # Positions of starting points in a line.
+        # It is determined by decrease or same value as previous.
+        # 10 20 30 15 20 15 -> 10 15 15.
+        # Collect all x0 starting positions
+        positions = []
         for block in blocks:
-
             for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    x0 = span["bbox"][0]
+                    # print(span["text"])
+                    positions.append(x0)
 
+        starting_positions = []
+        for i in range(len(positions)):
+            if i == 0 or positions[i] <= positions[i - 1]:
+                starting_positions.append(positions[i])
+
+        # Determine if there are at least 3 levels.
+        max_indent = 1
+        current_indent = 1
+        for i in range(1, len(starting_positions)):
+            if starting_positions[i] <= starting_positions[i - 1]:
+                current_indent = 1
+                continue
+            if (starting_positions[i] - starting_positions[i - 1]) > 4:
+                current_indent += 1
+                if current_indent > max_indent:
+                    max_indent = current_indent
+        print(starting_positions)
+
+        print(max_indent)
+
+        # Cluster indent positions using threshold (used for headword detection)
+        threshold = 4
+        positions_sorted = sorted(set(positions))
+        indent_levels = [positions_sorted[0]] if positions_sorted else []
+
+        for pos in positions_sorted[1:]:
+            if all(abs(pos - level) >= threshold for level in indent_levels):
+                indent_levels.append(pos)
+            if len(indent_levels) >= 3:
+                break
+
+        has_three_levels = len(indent_levels) >= 3
+
+        # Main extraction logic
+        for block in blocks:
+            for line in block.get("lines", []):
                 for span in line.get("spans", []):
                     text = span["text"].strip()
                     x0 = span["bbox"][0]
 
-                    # print(text, x0)
+                    if has_three_levels:
+                        # Assign indent level based on closest indent cluster
+                        indent_level = None
+                        for i, lvl in enumerate(indent_levels):
+                            if abs(x0 - lvl) < threshold:
+                                indent_level = i
+                                break
 
-                    # Detect a new entry by left-aligned text
-                    entry_threshold = page_minimums[page_num] + 1.5
+                        if indent_level == 0 and len(text) > 1:
+                            cleaned_text = allowed_chars_re.sub("", text)
 
-                    if x0 < entry_threshold and len(text) > 1:
-                        cleaned_text = allowed_chars_re.sub("", text)
+                            if cleaned_text in words:
+                                continue
 
-                        if cleaned_text in words:
+                            if current_entry["headword"]:
+                                # Write previous entry to CSV and temp file
+                                csv_writer.writerow([
+                                    row_number,
+                                    current_entry["headword"],
+                                    current_entry["page"] - 1,
+                                    current_entry["text"]
+                                ])
+                                f.write(
+                                    current_entry["headword"] + "(" +
+                                    str(current_entry["page"]) + "): " +
+                                    current_entry["text"] + "\n"
+                                )
+                                row_number += 1
+
+                            words.add(cleaned_text)
+                            current_entry = {
+                                "headword": cleaned_text,
+                                "text": "",
+                                "page": page_num + 1 + PAGE_OFFSET
+                            }
                             continue
 
-                        if current_entry["headword"]:
-                            entries.append(current_entry)
+                    # If not a headword, append text
+                    current_entry["text"] += text + " "
 
-                        words.add(cleaned_text)
-
-                        f.write(current_entry["headword"] + "(" + str(current_entry["page"]) + ")" + ": " + current_entry["text"] + "\n")
-                        current_entry = {"headword": cleaned_text, "text": "", "page": page_num + 1 + PAGE_OFFSET}
-                    else:
-                        current_entry["text"] += text + " "
-
-# Add final entry if exists
+# Handle final entry
 if current_entry["headword"]:
-    entries.append(current_entry)
+    csv_writer.writerow([
+        row_number,
+        current_entry["headword"],
+        current_entry["page"] - 1,
+        current_entry["text"]
+    ])
 
-output = io.StringIO()
-writer = csv.writer(output)
-
-for entry in entries:
-    row = [entry["headword"], entry["page"], entry["text"]]
-    writer.writerow(row)
-
-with open("entry_raw_data.csv", "w") as f:
-    f.write(output.getvalue())
-output.close()
+# Close the CSV file
+csv_file.close()
