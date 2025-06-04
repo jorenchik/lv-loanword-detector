@@ -13,14 +13,14 @@ PAGE_OFFSET = -3
 RANGE_START = 57
 RANGE_END = 1219
 
-RANGE_START = 172
-RANGE_END = RANGE_START 
-
-
 page_range = range(RANGE_START - 1, RANGE_END)
 
-
-
+PAGE_WITH_NO_HEADWORDS = [
+  117, 172, 271, 297, 334, 397, 472, 492, 493, 499, 510, 535, 582, 655, 
+  670, 689, 743, 808, 975, 1009, 1025, 1043, 1049, 1092, 1157, 1214
+]
+for i in range(len(PAGE_WITH_NO_HEADWORDS)): 
+    PAGE_WITH_NO_HEADWORDS[i] -= 1
 
 # Track processed headwords
 words = set()
@@ -35,6 +35,7 @@ csv_writer.writerow(["row_number", "headword", "page", "text"])  # Header
 with open("temp_results.txt", "w", encoding="utf-8") as f:
 
     for page_num in page_range:
+    # for page_num in [117 - 1]:
 
         print("\nPage: " + str(page_num + PAGE_OFFSET))
         page = doc.load_page(page_num)
@@ -57,21 +58,6 @@ with open("temp_results.txt", "w", encoding="utf-8") as f:
             if i == 0 or positions[i] <= positions[i - 1]:
                 starting_positions.append(positions[i])
 
-        # Determine if there are at least 3 levels.
-        max_indent = 1
-        current_indent = 1
-        for i in range(1, len(starting_positions)):
-            if starting_positions[i] <= starting_positions[i - 1]:
-                current_indent = 1
-                continue
-            if (starting_positions[i] - starting_positions[i - 1]) > 4:
-                current_indent += 1
-                if current_indent > max_indent:
-                    max_indent = current_indent
-        print(starting_positions)
-
-        print(max_indent)
-
         # Cluster indent positions using threshold (used for headword detection)
         threshold = 4
         positions_sorted = sorted(set(positions))
@@ -83,7 +69,7 @@ with open("temp_results.txt", "w", encoding="utf-8") as f:
             if len(indent_levels) >= 3:
                 break
 
-        has_three_levels = len(indent_levels) >= 3
+        # has_three_levels = True
 
         # Main extraction logic
         for block in blocks:
@@ -92,7 +78,7 @@ with open("temp_results.txt", "w", encoding="utf-8") as f:
                     text = span["text"].strip()
                     x0 = span["bbox"][0]
 
-                    if has_three_levels:
+                    if page_num not in PAGE_WITH_NO_HEADWORDS:
                         # Assign indent level based on closest indent cluster
                         indent_level = None
                         for i, lvl in enumerate(indent_levels):
