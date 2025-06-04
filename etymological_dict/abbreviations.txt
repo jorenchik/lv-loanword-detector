@@ -1,0 +1,162 @@
+# Abbreviations used in the dictionary
+
+a. — angļu
+ab. — austrumbaltu
+abi. — ablatīvs
+adj. — adjektīvs (īpašības vārds)
+adv. — adverbs (apstākļa vārds)
+afg. — afgāņu
+afri. — austrumfnzu
+aizg. — aizguvums, aizgūts
+ak. - akuzatīvs
+alb. — alba
+apv. — apvidvards vai apvidus nozīme
+apzīm. — apzīmētājs
+arh. — arhaisms (novecojis vārds, novecojusies forma)
+arm. — armēņu
+a-s. — anglosakšu
+asor. — augšsorbu (augšluziciešu)
+atv. — atvasinājums, atvasināts
+ave. — avestas
+b. — baltu
+bkr. — baltkrievu
+bsl. — baznīcslāvu
+b-sl. — baltu-slāvu
+bulg. — bulgāru
+bv. — baltvācu (Baltijas vācu izloksnes vārds vai forma)
+č. — čehu
+d. — dāņu
+dat. — datīvs
+dial. — dialekts, dialektisms
+divd. — divdabis
+divsk. — divskaitlis
+dor. — doriešu
+dsk. — daudzskaitlis
+dur. — duratīvs (verbs, kas izsaka ilgstošu darbību)
+dz. — dzimte
+fon. — fonētisks
+fr. — franču
+g.k. — galvenokārt
+gr. — grieķu (sengrieķu)
+ģen. — ģenitīvs
+ģerm. — ģermāņu, ģermānisms
+h. — holandiešu
+he. — hetu (Hetu valoda, arī nešītu valoda, ir anatoliešu valoda, kurā runāja
+    heti, kas no 17. līdz 12. gadsimtam p.m.ē. dzīvoja bronzas laikmeta Anatolijā).
+hom. — homonīms
+ide. — indoeiropiešu (indoeiropiešu pirmvalodas nozīme)
+ig. — igauņu
+indoirā. — indoirāņu (āriešu)
+ilat. — ilatīvs
+illīr. — illīriešu
+imp. — imperatīvs (pavēles izteiksme)
+inf. — infinitīvs (nenoteiksmē)
+instr. — instrumentālis
+intens. — intensīvs (verbs, kas izsaka darbību ar kāpinātu intensitāti)
+interj. — interjekcija (izsauksmes skaņas)
+intr. — intransitīvs (nepārejošs) verbs, intransitīva nozīme
+īpašv. — īpašvārds
+jr. — irāņu
+jsļ. — islandiešu
+it. — itāļu, itāliešu
+iter. — iteratīvs (frekventatīvs) — verbs, kas izsaka atkārtotu darbību
+iter.-dur. — iteratīvs un duratīvs (verbs, kas izsaka atkārtotu un ilgstošu darbību)
+iter.-intens. — iteratīvs un intensīvs (verbs, kas izsaka atkārtotu un kāpinātas intensitātes darbību)
+izd. — izdevums
+jātv. — jātvingu
+jlat. — jaunlatīņu
+X — doto etimoloģiju izstrādājis vārdnīcas autors
+(X) — doto etimoloģiju papildinājis vai pārveidojis vārdnīcas autors
+kauz. — kauzatīvs (faktitīvs) — verbs, kas izsaka kādas darbības vai stāvokļa cēloni, resp. izsaka, ka subjekts liek veikt kādu darbību
+Kop. r. — kopoti raksti
+kr. — krievu
+kurs. — kursisms; kursisko izloksņu vārds vai forma
+kursen. — kursenieku (Kuršu kāpu latviešu) izloksnē
+la. — latviešu
+lat. — latīņu
+līb. — lībiešu
+liter. — literārs, literārajā valodā
+lok. — lokatīvs
+lš. — lietuviešu (leišu)
+lv. — lejasvācu
+morf. — morfoloģisks
+nāk. — nākotne
+narev. — Narevas baltu (jātvingu?) izloksnes vārds
+nek. — nekatras dzimtes vārds, forma
+niev. — nievājoši
+nom. — nominatīvs
+nom.-ak. — nominatīvs un akuzatīvs (nek. dzimtē)
+norv. — norvēģu
+nos. — nosaukums
+noz. — nozīme
+oset. — osetīnu
+p. — poļu
+pag. — pagātne
+pag. pas. divd. — pagātnes pasīvais divdabis
+pārn. — pārnesti, pārnesta nozīme
+pas. — pasīvs
+perf. — perfekts
+pers. — persona
+pied. — piedēklis
+pirmside. — pirms indoeiropiešu pirmvalodas
+pr. — prūšu (senprūšu)
+pried. — priedēklis
+priev. — prievārds
+psl. — pirmslāvu
+rb. — rietumbaltu
+refl. — refleksīvs verbs, refleksīva forma
+rir. — rietumirāņu
+rum. — rumāņu
+s. — somu
+sa. — senangļu
+sal. — salīdzini ar
+sar. — sarunvalodā; sarunvalodas vārds vai forma
+sav. — senaugšvācu
+savien. — vārdu savienojums
+sč. — senčehu
+sebr. — senebreju
+sfr. — senfranču
+sfrī. — senfrīzu
+s-h. — serbhorvātu
+si. — senindiešu (galvenokārt sanskrita)
+siev. — sieviešu dzimtes
+sin. — sinonīms
+sisl. — senislandiešu (senskandināvu)
+sk. — skaties
+skr. — senkrievu
+sl. — slāvu
+slov. — slovaku
+s-mobile — mainīgais s vārda sākumā (kas nav vārda organiska sastāvdaļa)
+sp. — senpoju
+spers. — senpersu
+ssak. — sensakšu
+ssk. — senskandināvu (senislandiešu)
+ssl. — senslāvu
+subst. — substantīvs (lietvārds)
+s-u. — somugru
+szv. — senzviedru
+tadž. — tadžiku
+tag. — tagadne
+tdz. — tautasdziesma
+toh. — tohāru (A, B — tohāru dialekti)
+t. p. — tas pats, turpat
+trāķ. — trāķiešu
+trans. — transitīvs (pārejošs) verbs, transitīva nozīme
+tulk. — tulkojums, tulkojis
+ukr. — ukraiņu
+ung. — ungāru
+v. — vācu
+var. — variants
+vav. — vidusaugšvācu
+vēst. — vēsturiski
+vh. — vidusholandiešu
+vienk. — vienkāršrunā, vienkāršrunas vārds
+vietn. — vietniekvārds
+vietv. — vietvārds
+vir. — vīriešu dzimtes vārds, forma
+vlat. — viduslatīņu
+vlv. — viduslejasvācu
+vok. — vokatīvs
+vsk. — vienskaitlis
+vv. — vidusvācu
+zv. — zviedru
