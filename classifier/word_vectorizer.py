@@ -30,14 +30,17 @@ FEATURES: List[Union[ProbabilityFeature, LengthFeature]] = [
     # Raw surprisal scores (for older corpora)
     ProbabilityFeature("rainis", 2, mode="full"),
     ProbabilityFeature("lv_avizes", 2, mode="full"),
+    ProbabilityFeature("lava", 2, mode="full", as_suprisal=True),
     ProbabilityFeature("lv_disertacijas", 2, mode="full", as_suprisal=True),
     ProbabilityFeature("vikipedija", 2, mode="full", as_suprisal=True),
 
+    ProbabilityFeature("lava", 3, mode="full"),
     ProbabilityFeature("vikipedija", 3, mode="full"),
     ProbabilityFeature("lv_disertacijas", 3, mode="full"),
     ProbabilityFeature("rainis", 3, mode="full", as_suprisal=True),
     ProbabilityFeature("lv_avizes", 3, mode="full", as_suprisal=True),
 
+    ProbabilityFeature("lava", 3, mode="suffix"),
     ProbabilityFeature("vikipedija", 3, mode="suffix"),
     ProbabilityFeature("lv_disertacijas", 3, mode="suffix"),
     ProbabilityFeature("rainis", 3, mode="suffix", as_suprisal=True),
@@ -50,9 +53,13 @@ FEATURES: List[Union[ProbabilityFeature, LengthFeature]] = [
     ProbabilityFeature("lv_avizes", 3, mode="full", compare_to="lv_disertacijas"),
     ProbabilityFeature("lv_avizes", 3, mode="prefix", compare_to="lv_disertacijas"),
     ProbabilityFeature("lv_avizes", 3, mode="suffix", compare_to="lv_disertacijas"),
+
+    ProbabilityFeature("lv_avizes", 3, mode="full", compare_to="lava"),
+    ProbabilityFeature("lv_avizes", 3, mode="prefix", compare_to="lava"),
+    ProbabilityFeature("lv_avizes", 3, mode="suffix", compare_to="lava"),
 ]
 
-CORPORA_WITH_PROBS = ["rainis", "lv_disertacijas", "vikipedija", "lv_avizes"]
+CORPORA_WITH_PROBS = ["rainis", "lv_disertacijas", "vikipedija", "lv_avizes", "lava"]
 
 def load_ngram_surprisal(prob_dir):
     print(f"[I] Loading surprisal data from directory: {prob_dir}")
