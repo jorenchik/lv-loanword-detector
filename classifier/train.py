@@ -9,30 +9,37 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, f1_score, precision_score, recall_score
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
-from collections import defaultdict
-
 from word_vectorizer import load_ngram_surprisal, vectorize_words, FEATURES
-
-# -- Load surprisal data
-CORPORA_WITH_PROBS = ["rainis", "lv_disertacijas", "vikipedija", "lv_avizes"]
 
 # -- Classifier wrapper
 class LoanwordClassifier:
-    def __init__(self, classifier, threshold, imputer, scaler=None):
+    def __init__(self, classifier, threshold, imputer, scaler=None, corpus_ngrams=None):
         self.classifier = classifier
         self.threshold = threshold
         self.imputer = imputer
         self.scaler = scaler
+        self.corpus_ngrams = corpus_ngrams
 
-    def predict_proba(self, X):
+    def _preprocess(self, X):
         X_imputed = self.imputer.transform(X)
         if self.scaler:
             X_imputed = self.scaler.transform(X_imputed)
-        return self.classifier.predict_proba(X_imputed)[:, 1]
+        return X_imputed
+
+    def predict_proba(self, X):
+        X_proc = self._preprocess(X)
+        return self.classifier.predict_proba(X_proc)[:, 1]
 
     def predict(self, X):
         probs = self.predict_proba(X)
         return (probs >= self.threshold).astype(int)
+
+    def vectorize_words(self, df_words):
+        if self.corpus_ngrams is None:
+            raise ValueError("corpus_ngrams not set in this model.")
+        df_vec = vectorize_words(df_words, self.corpus_ngrams, FEATURES)
+        X = df_vec.drop(columns=["word", "is_loanword", "source"], errors="ignore")
+        return X, df_vec
 
 # -- Helpers
 def load_data(input_file):
@@ -69,7 +76,9 @@ def find_best_threshold(y_true, y_probs, min_precision=0.0, min_recall=0.0):
     print(f"[I] Chosen threshold: {best_threshold:.2f} (F1: {best_f1:.4f}) with min precision: {min_precision}")
     return best_threshold, best_f1
 
-def train_model(X_train_raw, y_train, X_tune_raw=None, y_tune=None, classifier_type="lr", threshold=None, auto_threshold=False, min_precision=0.0, min_recall=0.0, dump_metrics=False):
+def train_model(X_train_raw, y_train, X_tune_raw=None, y_tune=None, classifier_type="lr", threshold=None,
+                auto_threshold=False, min_precision=0.0, min_recall=0.0, dump_metrics=False,
+                corpus_ngrams=None):
     imputer = SimpleImputer(strategy="mean")
     X_train = imputer.fit_transform(X_train_raw)
     scaler = None
@@ -87,67 +96,6 @@ def train_model(X_train_raw, y_train, X_tune_raw=None, y_tune=None, classifier_t
             random_state=42,
             n_jobs=-1
         )
-
-        # clf = RandomForestClassifier(
-        #     n_estimators=600,
-        #     max_depth=None,
-        #     min_samples_split=2,
-        #     min_samples_leaf=1,
-        #     random_state=42,
-        #     n_jobs=-1
-        # )
-
-
-
-
-
-        # RandomForestClassifier(
-        #     n_estimators=100,
-        #     max_depth=5,
-        #     min_samples_split=10,
-        #     min_samples_leaf=5,
-        #     random_state=42,
-        #     n_jobs=-1
-        # )
-        #
-
-        # clf = RandomForestClassifier(
-        #     n_estimators=300,
-        #     max_depth=20,
-        #     min_samples_split=2,
-        #     min_samples_leaf=1,
-        #     random_state=42,
-        #     n_jobs=-1
-        # )
-
-        # RandomForestClassifier(
-        #     n_estimators=250,
-        #     max_depth=12,
-        #     min_samples_split=4,
-        #     min_samples_leaf=2,
-        #     class_weight="balanced",
-        #     random_state=42,
-        #     n_jobs=-1
-        # )
-
-        # clf = RandomForestClassifier(
-        #     n_estimators=100,
-        #     max_depth=None,
-        #     min_samples_split=2,
-        #     min_samples_leaf=1,
-        #     random_state=42,
-        #     n_jobs=-1
-        # )
-
-        # clf = RandomForestClassifier(
-        #     n_estimators=100,
-        #     max_depth=6,
-        #     min_samples_split=20,
-        #     min_samples_leaf=10,
-        #     random_state=42,
-        #     n_jobs=-1
-        # )
-
     else:
         raise ValueError("Unsupported classifier type.")
 
@@ -171,7 +119,7 @@ def train_model(X_train_raw, y_train, X_tune_raw=None, y_tune=None, classifier_t
     elif threshold is None:
         threshold = 0.5
 
-    return LoanwordClassifier(clf, threshold, imputer, scaler)
+    return LoanwordClassifier(clf, threshold, imputer, scaler, corpus_ngrams=corpus_ngrams)
 
 # -- Main script
 def main():
@@ -231,7 +179,8 @@ def main():
         auto_threshold=args.auto_threshold,
         min_precision=args.min_precision,
         min_recall=args.min_recall,
-        dump_metrics=args.dump_threshold_metrics
+        dump_metrics=args.dump_threshold_metrics,
+        corpus_ngrams=corpus_ngrams  # Inject into model
     )
     joblib.dump(model, args.model_out)
     print(f"[I] Model saved to {args.model_out}")
@@ -239,7 +188,6 @@ def main():
     if args.eval_vectors:
         X_eval_raw, y_eval = load_data(args.eval_vectors)
     elif args.eval_words:
-        print(args.eval_words)
         df_eval = pd.read_csv(args.eval_words)
         df_eval = vectorize_words(df_eval, corpus_ngrams, FEATURES)
         with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as f:

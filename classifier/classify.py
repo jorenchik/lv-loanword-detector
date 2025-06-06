@@ -2,7 +2,7 @@ import argparse
 import pandas as pd
 import joblib
 import tempfile
-from word_vectorizer import load_ngram_surprisal, vectorize_words, FEATURES
+from word_vectorizer import FEATURES
 from train import LoanwordClassifier
 from sklearn.metrics import classification_report
 
@@ -12,23 +12,17 @@ def load_vectors(vector_file):
     words = df["word"] if "word" in df.columns else None
     return X, words
 
-def interactive_mode(model, corpus_ngrams):
+def interactive_mode(model):
     print("[I] Enter words to classify (type 'exit' to quit):")
     while True:
         word = input("> ").strip()
         if word.lower() == 'exit':
             break
         df_word = pd.DataFrame({"word": [word]})
-        df_vec = vectorize_words(df_word, corpus_ngrams, FEATURES)
-        X, _ = load_vectors_from_df(df_vec)
+        X, _ = model.vectorize_words(df_word)
         prob = model.predict_proba(X)[0]
         pred = model.predict(X)[0]
         print(f"[I] Word: {word} | Prediction: {pred} | Probability: {prob:.4f}")
-
-def load_vectors_from_df(df):
-    X = df.drop(columns=["word", "is_loanword", "source"], errors="ignore")
-    words = df["word"] if "word" in df.columns else None
-    return X, words
 
 def main():
     parser = argparse.ArgumentParser(description="Classify words using a saved loanword classifier.")
@@ -38,28 +32,24 @@ def main():
     group.add_argument("--interactive", action="store_true", help="Run in interactive classification mode")
 
     parser.add_argument("--model", required=True, help="Path to trained model (.pkl)")
-    parser.add_argument("--prob_dir", help="Directory with ngram surprisal files (required if using --word_file or --interactive)")
     parser.add_argument("--output_file", help="Optional path to save predictions as CSV")
     args = parser.parse_args()
 
     model = joblib.load(args.model)
 
     if args.interactive:
-        if not args.prob_dir:
-            raise ValueError("--prob_dir is required for interactive mode")
-        corpus_ngrams = load_ngram_surprisal(args.prob_dir)
-        interactive_mode(model, corpus_ngrams)
+        interactive_mode(model)
         return
 
     if args.vector_file:
         X, words = load_vectors(args.vector_file)
+        df_vec = pd.read_csv(args.vector_file)
     elif args.word_file:
-        if not args.prob_dir:
-            raise ValueError("--prob_dir is required when using --word_file")
-        corpus_ngrams = load_ngram_surprisal(args.prob_dir)
         df_words = pd.read_csv(args.word_file)
-        df_vec = vectorize_words(df_words, corpus_ngrams, FEATURES)
-        X, words = load_vectors_from_df(df_vec)
+        X, df_vec = model.vectorize_words(df_words)
+        words = df_words["word"]
+    else:
+        raise ValueError("Either --vector_file or --word_file must be provided")
 
     probs = model.predict_proba(X)
     preds = model.predict(X)

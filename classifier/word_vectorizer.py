@@ -21,13 +21,6 @@ class LengthFeature:
     transform: Optional[str] = None  # None, "log", "sqrt"
 
 FEATURES: List[Union[ProbabilityFeature, LengthFeature]] = [
-
-    # Length-based features (experiment with them)
-    # LengthFeature(name="word_length"),
-    # LengthFeature(name="word_length_log", transform="log"),
-    # LengthFeature(name="word_length_sqrt", transform="sqrt"),
-
-    # Raw surprisal scores (for older corpora)
     ProbabilityFeature("rainis", 2, mode="full"),
     ProbabilityFeature("lv_avizes", 2, mode="full"),
     ProbabilityFeature("lava", 2, mode="full", as_suprisal=True),
@@ -61,9 +54,15 @@ FEATURES: List[Union[ProbabilityFeature, LengthFeature]] = [
 
 CORPORA_WITH_PROBS = ["rainis", "lv_disertacijas", "vikipedija", "lv_avizes", "lava"]
 
+def nested_dict():
+    return defaultdict(dict)
+
+def nested_defaultdict():
+    return defaultdict(nested_dict)
+
 def load_ngram_surprisal(prob_dir):
     print(f"[I] Loading surprisal data from directory: {prob_dir}")
-    corpus_ngrams = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
+    corpus_ngrams = defaultdict(nested_defaultdict)
     for corpus_key in CORPORA_WITH_PROBS:
         fname = f"{corpus_key}_ngram_probs.csv"
         fpath = os.path.join(prob_dir, fname)
@@ -107,12 +106,11 @@ def compute_feature_column(words_df, corpus_ngrams, feature: ProbabilityFeature)
 
         return words_df["word"].apply(compute_both).rename(columns={0: "diff", 1: "left", 2: "right"})
 
-    else:
-        return words_df["word"].apply(
-            lambda w: compute_aggregated_surprisal(w, base_dict, feature.ngram_size, method=feature.method)
-            if feature.as_suprisal else
-            -compute_aggregated_surprisal(w, base_dict, feature.ngram_size, method=feature.method)
-        )
+    def compute_value(w):
+        val = compute_aggregated_surprisal(w, base_dict, feature.ngram_size, method=feature.method)
+        return val if feature.as_suprisal else -val
+
+    return words_df["word"].apply(compute_value)
 
 def vectorize_words(words_df, corpus_ngrams, features: List[Union[ProbabilityFeature, LengthFeature]]):
     print(f"[I] Computing surprisal features for {len(words_df)} words...")
@@ -130,12 +128,15 @@ def vectorize_words(words_df, corpus_ngrams, features: List[Union[ProbabilityFea
                 words_df[col_name] = compute_feature_column(words_df, corpus_ngrams, feat)
 
         elif isinstance(feat, LengthFeature):
-            if feat.transform == "log":
-                words_df[feat.name] = words_df["word"].apply(lambda w: np.log(len(w)) if len(w) > 0 else 0.0)
-            elif feat.transform == "sqrt":
-                words_df[feat.name] = words_df["word"].apply(lambda w: np.sqrt(len(w)))
-            else:
-                words_df[feat.name] = words_df["word"].apply(len)
+            def transform_length(w):
+                if feat.transform == "log":
+                    return np.log(len(w)) if len(w) > 0 else 0.0
+                elif feat.transform == "sqrt":
+                    return np.sqrt(len(w))
+                else:
+                    return len(w)
+
+            words_df[feat.name] = words_df["word"].apply(transform_length)
 
     print("[I] Feature computation complete.")
     return words_df
