@@ -21,6 +21,11 @@ class LengthFeature:
     transform: Optional[str] = None  # None, "log", "sqrt"
 
 FEATURES: List[Union[ProbabilityFeature, LengthFeature]] = [
+
+    # LengthFeature(name="word_length", transform=None),
+    LengthFeature(name="word_length_log", transform="log"),
+    # LengthFeature(name="word_length_sqrt", transform="sqrt"),
+
     ProbabilityFeature("rainis", 2, mode="full"),
     ProbabilityFeature("lv_avizes", 2, mode="full"),
     ProbabilityFeature("lava", 2, mode="full", as_suprisal=True),

@@ -10,7 +10,7 @@ def load_vectors(vector_file):
     df = pd.read_csv(vector_file)
     X = df.drop(columns=["word", "is_loanword", "source"], errors="ignore")
     words = df["word"] if "word" in df.columns else None
-    return X, words
+    return X, words, df
 
 def interactive_mode(model):
     print("[I] Enter words to classify (type 'exit' to quit):")
@@ -33,6 +33,7 @@ def main():
 
     parser.add_argument("--model", required=True, help="Path to trained model (.pkl)")
     parser.add_argument("--output_file", help="Optional path to save predictions as CSV")
+    parser.add_argument("--filter_source", help="Optional source filter to evaluate only rows from this source")
     args = parser.parse_args()
 
     model = joblib.load(args.model)
@@ -42,8 +43,7 @@ def main():
         return
 
     if args.vector_file:
-        X, words = load_vectors(args.vector_file)
-        df_vec = pd.read_csv(args.vector_file)
+        X, words, df_vec = load_vectors(args.vector_file)
     elif args.word_file:
         df_words = pd.read_csv(args.word_file)
         X, df_vec = model.vectorize_words(df_words)
@@ -65,9 +65,16 @@ def main():
         print(f"Saved predictions to {args.output_file}")
 
     if "is_loanword" in df_vec.columns:
-        y_true = df_vec["is_loanword"]
-        print("\nClassification Report:")
-        print(classification_report(y_true, preds))
+        df_eval = df_vec.copy()
+        if args.filter_source and "source" in df_eval.columns:
+            df_eval = df_eval[df_eval["source"] == args.filter_source]
+        if not df_eval.empty:
+            y_true = df_eval["is_loanword"]
+            y_pred = preds[df_eval.index]
+            print("\nClassification Report:")
+            print(classification_report(y_true, y_pred))
+        else:
+            print("[W] No data matches the specified source filter.")
 
 if __name__ == "__main__":
     main()
