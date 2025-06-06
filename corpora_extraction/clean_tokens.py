@@ -16,8 +16,8 @@ def is_valid_token(token):
 def is_clean(token):
     return (
         token.isalpha() and
-        len(token) > 1 and
-        is_valid_token(token)
+        len(token) > 1 
+        # is_valid_token(token)
     )
 
 # --- Main cleaning logic ---

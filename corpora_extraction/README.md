@@ -9,12 +9,12 @@ avoid duplicates if such behaviour is desired.
 
 | Name            | Key               |  Description                   | Format (option in parsing) | Prob. computed?  |
 |-----------------|-------------------|--------------------------------|----------------------------|------------------|
-| LAvīzes         | `lv_avizes`       | LA newspaper (1822–1915)       | `vert`                     |        x         |
+| LAvīzes         | `lv_avizes`       | LA newspaper (1822–1915)       | `vert`                     |        ✓         |
 | Senie           | `senie`           | ~1600–1800 year Latv. language | `senie_xml`                |        x         |
 | LaVA            | `lava`            | Latv. learner essays           | `lava_csv`                 |        x         |
 | Likumi          | `likumi`          | Latv. law documents            | `vert`                     |        x         |
 | Disertacijas    | `lv_disertacijas` | Latv. dissertations            | `lv_disertacijas_txt`      |        ✓         |
-| Vikipēdija      | `vikipedija`      | Latvian Wikipedia              | `vert`                     |        x         |
+| Vikipēdija      | `vikipedija`      | Latvian Wikipedia              | `vert`                     |        ✓         |
 | Rainis          | `rainis`          | Raiņa darbu korpuss            | `rainis_txt`               |        ✓         |
 
 
@@ -42,3 +42,10 @@ pip install torch
 
 TODO(Jorens): describe the formats with examples.
 TODO(Jorens): add source links to the corpora.
+
+
+## Notes
+
+For now the filtering out non latvian symbol tokens while cleaning is only on the new corpora.
+
+
