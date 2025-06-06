@@ -4,6 +4,7 @@ import joblib
 import tempfile
 from word_vectorizer import load_ngram_surprisal, vectorize_words, FEATURES
 from train import LoanwordClassifier
+from sklearn.metrics import classification_report
 
 def load_vectors(vector_file):
     df = pd.read_csv(vector_file)
@@ -72,8 +73,11 @@ def main():
     if args.output_file:
         df_out.to_csv(args.output_file, index=False)
         print(f"Saved predictions to {args.output_file}")
-    else:
-        print(df_out)
+
+    if "is_loanword" in df_vec.columns:
+        y_true = df_vec["is_loanword"]
+        print("\nClassification Report:")
+        print(classification_report(y_true, preds))
 
 if __name__ == "__main__":
     main()
