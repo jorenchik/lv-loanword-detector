@@ -30,18 +30,18 @@ FEATURES: List[Union[ProbabilityFeature, LengthFeature]] = [
     # Raw surprisal scores (for older corpora)
     ProbabilityFeature("rainis", 2, mode="full"),
     ProbabilityFeature("lv_avizes", 2, mode="full"),
-    ProbabilityFeature("lv_disertacijas", 2, mode="full", as_suprisal=False),
-    ProbabilityFeature("vikipedija", 2, mode="full", as_suprisal=False),
+    ProbabilityFeature("lv_disertacijas", 2, mode="full", as_suprisal=True),
+    ProbabilityFeature("vikipedija", 2, mode="full", as_suprisal=True),
 
     ProbabilityFeature("vikipedija", 3, mode="full"),
     ProbabilityFeature("lv_disertacijas", 3, mode="full"),
-    ProbabilityFeature("rainis", 3, mode="full", as_suprisal=False),
-    ProbabilityFeature("lv_avizes", 3, mode="full", as_suprisal=False),
+    ProbabilityFeature("rainis", 3, mode="full", as_suprisal=True),
+    ProbabilityFeature("lv_avizes", 3, mode="full", as_suprisal=True),
 
     ProbabilityFeature("vikipedija", 3, mode="suffix"),
     ProbabilityFeature("lv_disertacijas", 3, mode="suffix"),
-    ProbabilityFeature("rainis", 3, mode="suffix", as_suprisal=False),
-    ProbabilityFeature("lv_avizes", 3, mode="suffix", as_suprisal=False),
+    ProbabilityFeature("rainis", 3, mode="suffix", as_suprisal=True),
+    ProbabilityFeature("lv_avizes", 3, mode="suffix", as_suprisal=True),
 
     ProbabilityFeature("rainis", 3, mode="full", compare_to="vikipedija"),
     ProbabilityFeature("rainis", 3, mode="prefix", compare_to="vikipedija"),
