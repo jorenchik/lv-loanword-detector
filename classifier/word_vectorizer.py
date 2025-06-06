@@ -1,30 +1,29 @@
-import pandas as pd
 import os
 import argparse
 import numpy as np
+import pandas as pd
 from collections import defaultdict
-from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import List, Union
 
-@dataclass
+# --- Feature classes ---
 class ProbabilityFeature:
-    corpus: str
-    ngram_size: int
-    mode: str = "full"  # full, prefix, suffix
-    method: str = "max"  # max, mean, etc.
-    compare_to: Optional[str] = None  # other corpus to compare to (for difference)
-    as_suprisal: bool = True  # if False, treat as raw probability (negate surprise)
+    def __init__(self, corpus, ngram_size, mode="full", as_suprisal=False, compare_to=None, method="mean"):
+        self.corpus = corpus
+        self.ngram_size = ngram_size
+        self.mode = mode
+        self.as_suprisal = as_suprisal
+        self.compare_to = compare_to
+        self.method = method
 
-@dataclass
 class LengthFeature:
-    name: str = "word_length"
-    transform: Optional[str] = None  # None, "log", "sqrt"
+    def __init__(self, name="length", transform=None):
+        self.name = name
+        self.transform = transform
 
-FEATURES: List[Union[ProbabilityFeature, LengthFeature]] = [
+# --- Constants ---
 
-    # LengthFeature(name="word_length", transform=None),
+FEATURES = [
     LengthFeature(name="word_length_log", transform="log"),
-    # LengthFeature(name="word_length_sqrt", transform="sqrt"),
 
     ProbabilityFeature("rainis", 2, mode="full"),
     ProbabilityFeature("lv_avizes", 2, mode="full"),
@@ -56,9 +55,9 @@ FEATURES: List[Union[ProbabilityFeature, LengthFeature]] = [
     ProbabilityFeature("lv_avizes", 3, mode="prefix", compare_to="lava"),
     ProbabilityFeature("lv_avizes", 3, mode="suffix", compare_to="lava"),
 ]
-
 CORPORA_WITH_PROBS = ["rainis", "lv_disertacijas", "vikipedija", "lv_avizes", "lava"]
 
+# --- Helper functions ---
 def nested_dict():
     return defaultdict(dict)
 
@@ -118,7 +117,7 @@ def compute_feature_column(words_df, corpus_ngrams, feature: ProbabilityFeature)
     return words_df["word"].apply(compute_value)
 
 def vectorize_words(words_df, corpus_ngrams, features: List[Union[ProbabilityFeature, LengthFeature]]):
-    print(f"[I] Computing surprisal features for {len(words_df)} words...")
+    print(f"[I] Computing features for {len(words_df)} words...")
     for feat in features:
         if isinstance(feat, ProbabilityFeature):
             base = f"{feat.ngram_size}g_{feat.mode}_{feat.corpus}"
@@ -140,20 +139,31 @@ def vectorize_words(words_df, corpus_ngrams, features: List[Union[ProbabilityFea
                     return np.sqrt(len(w))
                 else:
                     return len(w)
-
             words_df[feat.name] = words_df["word"].apply(transform_length)
 
     print("[I] Feature computation complete.")
     return words_df
 
+# --- Main routine ---
 def main(word_file, prob_dir, output_file):
     print(f"[I] Reading input words from: {word_file}")
     words_df = pd.read_csv(word_file)
+
+    # Add source if it's not in the CSV already
+    if "source" not in words_df.columns:
+        print("[W] 'source' column missing — trying to infer from 'source'")
+        words_df["source"] = words_df["source"].map({
+            "etym_dict": "etym_dict",
+            "manual_collection": "manual_collection"
+        }).fillna("unknown")
+
     corpus_ngrams = load_ngram_surprisal(prob_dir)
+
     words_df = vectorize_words(words_df, corpus_ngrams, FEATURES)
     words_df.to_csv(output_file, index=False)
     print(f"[I] Saved feature-enhanced word vectors to {output_file}")
 
+# --- Entry point ---
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compute n-gram surprisal features for words.")
     parser.add_argument("--word_file", required=True, help="Path to input CSV file with words")

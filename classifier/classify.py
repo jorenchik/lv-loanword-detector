@@ -31,6 +31,7 @@ def main():
     group.add_argument("--word_file", help="CSV file with raw words to be vectorized")
     group.add_argument("--interactive", action="store_true", help="Run in interactive classification mode")
 
+    parser.add_argument("--threshold", type=float, default=None, help="Path to trained model (.pkl)")
     parser.add_argument("--model", required=True, help="Path to trained model (.pkl)")
     parser.add_argument("--output_file", help="Optional path to save predictions as CSV")
     parser.add_argument("--filter_source", help="Optional source filter to evaluate only rows from this source")
@@ -52,7 +53,10 @@ def main():
         raise ValueError("Either --vector_file or --word_file must be provided")
 
     probs = model.predict_proba(X)
-    preds = model.predict(X)
+    if args.threshold:
+        preds = model.predict(X, args.threshold)
+    else: 
+        preds = model.predict(X)
 
     df_out = pd.DataFrame({
         "word": words if words is not None else range(len(preds)),
@@ -61,6 +65,8 @@ def main():
     })
 
     if args.output_file:
+        df_eval = df_vec.copy()
+        df_out["truth"] = df_eval["is_loanword"]
         df_out.to_csv(args.output_file, index=False)
         print(f"Saved predictions to {args.output_file}")
 

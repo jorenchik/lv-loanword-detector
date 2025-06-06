@@ -30,9 +30,12 @@ class LoanwordClassifier:
         X_proc = self._preprocess(X)
         return self.classifier.predict_proba(X_proc)[:, 1]
 
-    def predict(self, X):
+    def predict(self, X, threshold=None):
         probs = self.predict_proba(X)
-        return (probs >= self.threshold).astype(int)
+        if threshold is not None:
+            return (probs >= threshold).astype(int)
+        else:
+            return (probs >= self.threshold).astype(int)
 
     def vectorize_words(self, df_words):
         if self.corpus_ngrams is None:
