@@ -4,7 +4,7 @@ import argparse
 import numpy as np
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Union
 
 @dataclass
 class ProbabilityFeature:
@@ -15,29 +15,34 @@ class ProbabilityFeature:
     compare_to: Optional[str] = None  # other corpus to compare to (for difference)
     as_suprisal: bool = True  # if False, treat as raw probability (negate surprise)
 
-FEATURES = [
+@dataclass
+class LengthFeature:
+    name: str = "word_length"
+    transform: Optional[str] = None  # None, "log", "sqrt"
+
+FEATURES: List[Union[ProbabilityFeature, LengthFeature]] = [
+
+    # Length-based features (experiment with them)
+    # LengthFeature(name="word_length"),
+    # LengthFeature(name="word_length_log", transform="log"),
+    # LengthFeature(name="word_length_sqrt", transform="sqrt"),
 
     # Raw surprisal scores (for older corpora)
-
-    # 2-grams
     ProbabilityFeature("rainis", 2, mode="full"),
     ProbabilityFeature("lv_avizes", 2, mode="full"),
     ProbabilityFeature("lv_disertacijas", 2, mode="full", as_suprisal=False),
     ProbabilityFeature("vikipedija", 2, mode="full", as_suprisal=False),
 
-    # 3-grams
     ProbabilityFeature("vikipedija", 3, mode="full"),
     ProbabilityFeature("lv_disertacijas", 3, mode="full"),
     ProbabilityFeature("rainis", 3, mode="full", as_suprisal=False),
     ProbabilityFeature("lv_avizes", 3, mode="full", as_suprisal=False),
 
-    # Suffix and Prefix based surprisal
     ProbabilityFeature("vikipedija", 3, mode="suffix"),
     ProbabilityFeature("lv_disertacijas", 3, mode="suffix"),
     ProbabilityFeature("rainis", 3, mode="suffix", as_suprisal=False),
     ProbabilityFeature("lv_avizes", 3, mode="suffix", as_suprisal=False),
 
-    # Contrasts: modern vs traditional sources
     ProbabilityFeature("rainis", 3, mode="full", compare_to="vikipedija"),
     ProbabilityFeature("rainis", 3, mode="prefix", compare_to="vikipedija"),
     ProbabilityFeature("rainis", 3, mode="suffix", compare_to="vikipedija"),
@@ -67,14 +72,6 @@ def load_ngram_surprisal(prob_dir):
 def get_ngrams(word, n):
     return [word[i:i+n] for i in range(len(word) - n + 1)]
 
-# def compute_aggregated_surprisal(word, ngram_dict, n, method="max"):
-#     ngrams = get_ngrams(word, n)
-#     values = [ngram_dict.get(ng) for ng in ngrams if ng in ngram_dict and not np.isnan(ngram_dict[ng])]
-#
-#     if values:
-#         return float(np.mean(values))
-#     else:
-#         return 20.0
 def compute_aggregated_surprisal(word, ngram_dict, n, method="max"):
     ngrams = get_ngrams(word, n)
     surprisals = [ngram_dict.get(ng, np.nan) for ng in ngrams]
@@ -110,19 +107,29 @@ def compute_feature_column(words_df, corpus_ngrams, feature: ProbabilityFeature)
             -compute_aggregated_surprisal(w, base_dict, feature.ngram_size, method=feature.method)
         )
 
-def vectorize_words(words_df, corpus_ngrams, features: List[ProbabilityFeature]):
+def vectorize_words(words_df, corpus_ngrams, features: List[Union[ProbabilityFeature, LengthFeature]]):
     print(f"[I] Computing surprisal features for {len(words_df)} words...")
     for feat in features:
-        base = f"{feat.ngram_size}g_{feat.mode}_{feat.corpus}"
-        if feat.compare_to:
-            col_name = f"{base}_diff_{feat.compare_to}"
-            results = compute_feature_column(words_df, corpus_ngrams, feat)
-            words_df[f"{col_name}"] = results["diff"]
-            words_df[f"{base}_vs_{feat.compare_to}_left"] = results["left"]
-            words_df[f"{base}_vs_{feat.compare_to}_right"] = results["right"]
-        else:
-            col_name = f"{base}_prob" if not feat.as_suprisal else base
-            words_df[col_name] = compute_feature_column(words_df, corpus_ngrams, feat)
+        if isinstance(feat, ProbabilityFeature):
+            base = f"{feat.ngram_size}g_{feat.mode}_{feat.corpus}"
+            if feat.compare_to:
+                col_name = f"{base}_diff_{feat.compare_to}"
+                results = compute_feature_column(words_df, corpus_ngrams, feat)
+                words_df[f"{col_name}"] = results["diff"]
+                words_df[f"{base}_vs_{feat.compare_to}_left"] = results["left"]
+                words_df[f"{base}_vs_{feat.compare_to}_right"] = results["right"]
+            else:
+                col_name = f"{base}_prob" if not feat.as_suprisal else base
+                words_df[col_name] = compute_feature_column(words_df, corpus_ngrams, feat)
+
+        elif isinstance(feat, LengthFeature):
+            if feat.transform == "log":
+                words_df[feat.name] = words_df["word"].apply(lambda w: np.log(len(w)) if len(w) > 0 else 0.0)
+            elif feat.transform == "sqrt":
+                words_df[feat.name] = words_df["word"].apply(lambda w: np.sqrt(len(w)))
+            else:
+                words_df[feat.name] = words_df["word"].apply(len)
+
     print("[I] Feature computation complete.")
     return words_df
 
