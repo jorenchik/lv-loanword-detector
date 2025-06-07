@@ -13,19 +13,23 @@ def is_valid_token(token):
     allowed = set("aābcčdeēfgģhiījkķlļlņoprsštuūvzž")
     return all(c in allowed for c in token.lower())
 
-def is_clean(token):
+def is_clean(token, check_valid=True):
     return (
         token.isalpha() and
-        len(token) > 1 
-        # is_valid_token(token)
+        len(token) > 1 and
+        (is_valid_token(token) if check_valid else True)
     )
 
 # --- Main cleaning logic ---
-def clean_tokens(input_file, output_file):
+def clean_tokens(input_file, output_file, check_valid):
     with open(input_file, encoding='utf-8') as f:
         raw_tokens = [line.strip('<>\n ') for line in f if line.strip()]
 
-    filtered = [normalize_token(t) for t in tqdm(raw_tokens, desc="Filtering tokens") if not is_shorthand(t) and is_clean(t)]
+    filtered = [
+        normalize_token(t)
+        for t in tqdm(raw_tokens, desc="Filtering tokens")
+        if not is_shorthand(t) and is_clean(t, check_valid)
+    ]
 
     with open(output_file, "w", encoding="utf-8") as out_f:
         for token in filtered:
@@ -37,5 +41,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Normalize and filter tokens from <token> format file.")
     parser.add_argument("input_file", help="Path to raw token file")
     parser.add_argument("--output", default="cleaned_tokens.txt", help="Output path for cleaned token file")
+    parser.add_argument("--skip-valid-check", action="store_true", help="Skip the is_valid_token check")
+
     args = parser.parse_args()
-    clean_tokens(args.input_file, args.output)
+    clean_tokens(args.input_file, args.output, not args.skip_valid_check)
