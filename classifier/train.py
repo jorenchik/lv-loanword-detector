@@ -92,14 +92,29 @@ def train_model(X_train_raw, y_train, X_tune_raw=None, y_tune=None, classifier_t
         clf = LogisticRegression(max_iter=1000)
     elif classifier_type == "rf":
         clf = RandomForestClassifier(
+
             # combined: 300 - OK, 325 - High precision; 350 - a bit worse than
             # 300; 600 - higher pres, 400 - 66 / 58; 900 - higher precision (72/53);
             # for now -> favor higher precision.
             n_estimators=900,
-            max_depth=None,
-            # Try
+
+            # None -> higher pres, 20 - OK (77/67)
+            # After 25+ precision is biased (not that simple though ;-]).
+            max_depth=20,
+
+            # Experiment with this (5 and 2 on baseline): 
             min_samples_split=5,
             min_samples_leaf=2,
+
+            # It can be: "balanced" or "balanced_subsample"
+            # both balance options - positive precision skyrokets, but the
+            # second one is usually better.
+            class_weight=None,
+
+            # Bootstrap.
+            bootstrap=True,
+            # max_samples=.9,
+
             random_state=42,
             n_jobs=-1
         )
