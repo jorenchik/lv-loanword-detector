@@ -1,0 +1,1 @@
+https://github.com/jorenchik/lv-loanword-detection/releases/download/v0_1_0/rf_v0_1_0.pkl
