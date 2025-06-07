@@ -69,7 +69,8 @@ def main():
 
     if args.output_file:
         df_eval = df_vec.copy()
-        df_out["truth"] = df_eval["is_loanword"]
+        if "is_loanword" in df_vec.columns:
+            df_out["actual_label"] = df_eval["is_loanword"]
         df_out.to_csv(args.output_file, index=False)
         print(f"Saved predictions to {args.output_file}")
 
