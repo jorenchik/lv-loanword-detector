@@ -1,2 +1,2 @@
-https://github.com/jorenchik/lv-loanword-detection/releases/download/v0.2.1/rf_v0_2_1.pkl
-https://github.com/jorenchik/lv-loanword-detection/releases/download/v0.2.1/lr_v0_2_1.pkl
+https://github.com/jorenchik/lv-loanword-detector/releases/download/v0.2.1/rf_v0_2_1.pkl
+https://github.com/jorenchik/lv-loanword-detector/releases/download/v0.2.1/lr_v0_2_1.pkl
