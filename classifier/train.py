@@ -92,8 +92,12 @@ def train_model(X_train_raw, y_train, X_tune_raw=None, y_tune=None, classifier_t
         clf = LogisticRegression(max_iter=1000)
     elif classifier_type == "rf":
         clf = RandomForestClassifier(
-            n_estimators=200,
-            max_depth=10,
+            # combined: 300 - OK, 325 - High precision; 350 - a bit worse than
+            # 300; 600 - higher pres, 400 - 66 / 58; 900 - higher precision (72/53);
+            # for now -> favor higher precision.
+            n_estimators=900,
+            max_depth=None,
+            # Try
             min_samples_split=5,
             min_samples_leaf=2,
             random_state=42,
