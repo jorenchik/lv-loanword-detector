@@ -4,7 +4,7 @@ import joblib
 from classifier.train import LoanwordClassifier
 
 # Load the model.
-model_path = "pretrained_models/rf_v1_0_0.pkl" 
+model_path = "pretrained_models/rf_v0_1_0.pkl" 
 model: LoanwordClassifier = joblib.load(model_path)
 
 # Example Latvian words
