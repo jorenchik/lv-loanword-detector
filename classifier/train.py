@@ -59,7 +59,14 @@ def train_model(X_train_raw, y_train, X_tune_raw=None, y_tune=None, classifier_t
     if classifier_type == "lr":
         scaler = StandardScaler()
         X_train = scaler.fit_transform(X_train)
-        clf = LogisticRegression(max_iter=1000)
+        clf = LogisticRegression(
+            C=0.5,                  # try 0.1, 1.0, 10.0
+            penalty="l2",           # or "l1" with solver='liblinear' or 'saga'
+            solver="lbfgs",         # "liblinear", "saga", or "newton-cg" 
+            max_iter=2000,          
+            class_weight=None,      # "balanced" or not 
+            random_state=42
+        )
     elif classifier_type == "rf":
         clf = RandomForestClassifier(
 
