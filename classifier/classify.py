@@ -38,6 +38,7 @@ def main():
     args = parser.parse_args()
 
     model = joblib.load(args.model)
+    print("[I] Base threshold:", "%.2f" % model.threshold)
 
     if args.interactive:
         interactive_mode(model)
