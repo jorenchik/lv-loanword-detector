@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lv-loanword-detection"
+version = "0.1.0"
+description = "Latvian loanword classifier"
+authors = [
+    { name="Jorens Shtekels", email="jorens.stekels@outlook.com" }
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    # General dependencies.
+    "pandas",
+    # Entry extraction from the dict.
+    "pymupdf",
+    # Corpora extraction.
+    "lxml",
+    # Classifier and Labeling.
+    "joblib",
+    "scikit-learn",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["classifier", "integration"]
+
+[project.scripts]
+lv-loanword-classify = "classifier.classify:main"
+lv-loanword-example = "integration.example:main"
+
+[project.optional-dependencies]
+stanza = ["stanza>=1.10.0"]

@@ -11,40 +11,8 @@ from sklearn.metrics import classification_report, f1_score, precision_score, re
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 
+from classifier.model import LoanwordClassifier
 from classifier.word_vectorizer import load_ngram_surprisal, vectorize_words, FEATURES
-
-# -- Classifier wrapper
-class LoanwordClassifier:
-    def __init__(self, classifier, threshold, imputer, scaler=None, corpus_ngrams=None):
-        self.classifier = classifier
-        self.threshold = threshold
-        self.imputer = imputer
-        self.scaler = scaler
-        self.corpus_ngrams = corpus_ngrams
-
-    def _preprocess(self, X):
-        X_imputed = self.imputer.transform(X)
-        if self.scaler:
-            X_imputed = self.scaler.transform(X_imputed)
-        return X_imputed
-
-    def predict_proba(self, X):
-        X_proc = self._preprocess(X)
-        return self.classifier.predict_proba(X_proc)[:, 1]
-
-    def predict(self, X, threshold=None):
-        probs = self.predict_proba(X)
-        if threshold is not None:
-            return (probs >= threshold).astype(int)
-        else:
-            return (probs >= self.threshold).astype(int)
-
-    def vectorize_words(self, df_words):
-        if self.corpus_ngrams is None:
-            raise ValueError("corpus_ngrams not set in this model.")
-        df_vec = vectorize_words(df_words, self.corpus_ngrams, FEATURES)
-        X = df_vec.drop(columns=["word", "is_loanword", "source"], errors="ignore")
-        return X, df_vec
 
 # -- Helpers
 def load_data(input_file):
@@ -147,6 +115,8 @@ def train_model(X_train_raw, y_train, X_tune_raw=None, y_tune=None, classifier_t
 
 # -- Main script
 def main():
+    from classifier.model import LoanwordClassifier
+
     parser = argparse.ArgumentParser(description="Train classifier on word surprisal features.")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--train_vectors")

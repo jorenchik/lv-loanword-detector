@@ -4,7 +4,7 @@ import joblib
 import tempfile
 from sklearn.metrics import classification_report
 
-from classifier.train import LoanwordClassifier
+from classifier.model import LoanwordClassifier
 from classifier.word_vectorizer import FEATURES
 
 def load_vectors(vector_file):
@@ -26,6 +26,7 @@ def interactive_mode(model):
         print(f"[I] Word: {word} | Prediction: {pred} | Probability: {prob:.4f}")
 
 def main():
+
     parser = argparse.ArgumentParser(description="Classify words using a saved loanword classifier.")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--vector_file", help="CSV file with precomputed features")
