@@ -30,13 +30,13 @@ def download_model(model_url, model_dir):
 
 def main():
     try:
-        text_file = files("scripts") / "latest_models.txt"
+        text_file = files("scripts") / "current_models.txt"
     except ModuleNotFoundError as e:
-        raise RuntimeError("Cannot find scripts.latest_models.txt") from e
+        raise RuntimeError("Cannot find scripts.current_models.txt") from e
 
     model_urls = [line.strip() for line in text_file.read_text().splitlines() if line.strip()]
     if not model_urls:
-        raise ValueError("No model URLs found in latest_models.txt")
+        raise ValueError("No model URLs found in current_models.txt")
 
     default_dir = Path.home() / ".lv_loanword_detection" / "pretrained_models"
     user_input = input(f"[?] Where should the models be saved? (default: {default_dir}): ").strip()

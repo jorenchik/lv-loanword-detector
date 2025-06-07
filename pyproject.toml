@@ -39,4 +39,4 @@ lv-loanword-download = "scripts.download_models:main"
 stanza = ["stanza>=1.10.0"]
 
 [tool.setuptools.package-data]
-scripts = ["latest_models.txt"]
+scripts = ["current_models.txt"]
