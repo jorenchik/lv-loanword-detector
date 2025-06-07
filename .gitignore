@@ -1,3 +1,6 @@
 plan.md
 **/__pycache__
-
+**/build/
+**/data/
+**/*.egg-info/
+**/pretrained_models/
