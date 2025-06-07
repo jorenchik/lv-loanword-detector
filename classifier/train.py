@@ -4,12 +4,14 @@ import os
 import tempfile
 import numpy as np
 import joblib
+
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, f1_score, precision_score, recall_score
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
-from word_vectorizer import load_ngram_surprisal, vectorize_words, FEATURES
+
+from classifier.word_vectorizer import load_ngram_surprisal, vectorize_words, FEATURES
 
 # -- Classifier wrapper
 class LoanwordClassifier:

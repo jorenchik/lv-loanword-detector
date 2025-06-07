@@ -2,9 +2,10 @@ import argparse
 import pandas as pd
 import joblib
 import tempfile
-from word_vectorizer import FEATURES
-from train import LoanwordClassifier
 from sklearn.metrics import classification_report
+
+from classifier.train import LoanwordClassifier
+from classifier.word_vectorizer import FEATURES
 
 def load_vectors(vector_file):
     df = pd.read_csv(vector_file)
