@@ -4,3 +4,4 @@ plan.md
 **/data/
 **/*.egg-info/
 **/pretrained_models/
+/.idea/
