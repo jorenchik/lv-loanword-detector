@@ -5,3 +5,5 @@ plan.md
 **/*.egg-info/
 **/pretrained_models/
 /.idea/
+/packaged_models/
+

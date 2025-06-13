@@ -24,6 +24,8 @@ dependencies = [
     "scikit-learn",
     # Scripts.
     "requests",
+    # Gui
+    "coloredlogs",
 ]
 
 [tool.setuptools.packages.find]
