@@ -30,12 +30,13 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["classifier", "integration", "scripts"]
+include = ["classifier", "integration", "scripts", "gui_integration"]
 
 [project.scripts]
 lv-loanword-classify = "classifier.classify:main"
-lv-loanword-example = "integration.example:main"
+lv-loanword-example  = "integration.example:main"
 lv-loanword-download = "scripts.download_models:main"
+lv-loanword-gui      = "gui_integration.main:main"
 
 [project.optional-dependencies]
 stanza = ["stanza>=1.10.0"]
