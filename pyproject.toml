@@ -26,6 +26,7 @@ dependencies = [
     "requests",
     # Gui
     "coloredlogs",
+    "tkinter-tooltip",
 ]
 
 [tool.setuptools.packages.find]
