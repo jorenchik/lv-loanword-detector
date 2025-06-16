@@ -23,6 +23,9 @@ from classifier.train import LoanwordClassifier
 
 import gui_integration.utils as utils
 
+import concurrent.futures
+import threading
+
 log = utils.get_logger(__name__)
 
 
@@ -194,6 +197,9 @@ class Application:
         ctx_button_do_funny.configure(command= lambda: log.debug("Manual update") or self.on_RedoTextAreaHighlighting() )
         ctx_button_do_funny.grid(padx=5, pady=5, sticky='nsew')
 
+        self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        self._highlight_lock = threading.Lock()
+
         # # TAB 2
         # ctx_tab2 = tk.Frame(ctx_tab_navbar)
         # ctx_tab_navbar.add(ctx_tab2, text="  TAB 2  ")
@@ -244,6 +250,7 @@ class Application:
             yield (start, end, token_str)
         return None
 
+
     def highlight_textarea(self, text_contents: str | None = None):
         ctx_text_area = self.ctx_text_area
         current_model = self.ctx_model_type.get()
@@ -258,32 +265,55 @@ class Application:
         else:
             new_contents = text_contents
 
+        with self._highlight_lock:
+            # Do we need to retokenize?
+            do_contents_match = (self._last_textarea_contents == new_contents)
+            self._last_textarea_contents = new_contents
+
+            # Perform text tagging if input has changed
+            if self._last_textarea_tokenized is not None and do_contents_match:
+                tokenized = self._last_textarea_tokenized
+            else:
+                tokenized = list(Application.tokenize_text(new_contents))
+                self._last_textarea_tokenized = tokenized
+
+            # Do we need to recompute probabilities?
+            if self._last_textarea_probabilities is not None and do_contents_match:
+                probabilities = self._last_textarea_probabilities
+                self._apply_highlighting(tokenized, probabilities)
+                return
+
+            only_words = [token for _, _, token in tokenized]
+            if not only_words:
+                self._last_textarea_probabilities = []
+                self._apply_highlighting(tokenized, [])
+                return
+
+            future = self._executor.submit(model_params.PredictProbabilities, only_words)
+            future.add_done_callback(lambda fut: self.tk_root.after(
+                0, self._on_prediction_ready, tokenized, fut
+            ))
+
+    def _on_prediction_ready(self, tokenized, fut: concurrent.futures.Future):
+        try:
+            probabilities = fut.result()
+        except Exception as e:
+            log.exception("Error during prediction: %s", e)
+            return
+
+        with self._highlight_lock:
+            self._last_textarea_probabilities = probabilities
+            self._apply_highlighting(tokenized, probabilities)
+
+    def _apply_highlighting(self, tokenized, probabilities):
+        ctx_text_area = self.ctx_text_area
+
         # Strip all current formating
         for tag in ctx_text_area.tag_names():
             ctx_text_area.tag_delete(tag)
         for ttp in self._textarea_ttps:
             ttp.destroy()
         self._textarea_ttps.clear()
-
-        # Do we need to retokenize?
-        do_contents_match = (self._last_textarea_contents == new_contents)
-        self._last_textarea_contents = new_contents
-
-        # Perform text tagging if input has changed
-        if self._last_textarea_tokenized is not None and do_contents_match:
-            tokenized = self._last_textarea_tokenized
-        else:
-            tokenized = list(Application.tokenize_text(new_contents))
-            self._last_textarea_tokenized = tokenized
-
-        # Do we need to recompute probabilities?
-        if self._last_textarea_probabilities is not None and do_contents_match:
-            probabilities = self._last_textarea_probabilities
-        else:
-            self._last_textarea_contents = new_contents
-            only_words = [ token for _, _, token in tokenized ]
-            probabilities = model_params.PredictProbabilities(only_words) if len(only_words) > 0 else []
-            self._last_textarea_probabilities = probabilities
 
         # Apply tags to textarea
         model_treshold = self.ctx_model_treshold.get()
