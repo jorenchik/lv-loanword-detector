@@ -2,7 +2,7 @@
 import os
 import sys
 import random
-import functools
+import dataclasses as dc
 from typing import Generator, Callable, Any
 
 import re
@@ -14,8 +14,12 @@ import tkinter as tkint
 import tkinter.ttk as tkintTtk
 import tkinter.font as tkintFont
 import tktooltip
-
 tk = tkint
+
+import joblib
+import numpy as np
+import pandas as pd
+from classifier.train import LoanwordClassifier
 
 import gui_integration.utils as utils
 
@@ -31,10 +35,45 @@ protected, but with the right team, we can punch through those
 defenses, take this beast out, and break their grip on Freehold.
 """.lstrip('\n')
 
-# todo-s:
-# Reset button in tab 1 ???
-# katram modelim savs threshold, to neaizmirsti
-#
+
+@dc.dataclass(slots=True, init=False)
+class ModelParams:
+    model_name: str
+    classifier_obj: LoanwordClassifier
+    default_treshold: float
+    custom_trehsold: float
+
+    def __init__(self, model_name: str, model_file_path: str):
+        assert os.path.isfile(model_file_path), "No such file: {}".format(model_file_path)
+        self.model_name: str = model_name
+        self.classifier_obj = joblib.load(model_file_path)
+        self.custom_trehsold  = self.classifier_obj.threshold
+        self.default_treshold = self.classifier_obj.threshold
+
+    def PredictProbabilities(self, words: list[str]) -> list[float]:
+        # Dataframe because we are too cool to use std::list
+        df_words = pd.DataFrame({"word": words})
+
+        # Vectorize the input words
+        X, _ = self.classifier_obj.vectorize_words(df_words)
+
+        # Predict using the model
+        probabilities: np.ndarray = self.classifier_obj.predict_proba(X)
+        return probabilities # noqa "This is fine"
+
+
+class DummyModlelParams(ModelParams):
+    def __init__(self, model_name: str, eval_func: Callable[[str], float]):
+        log.warning(f"DummyModlelParams '{model_name}' created.")
+        try: super().__init__(model_name, "")
+        except AssertionError: pass
+        self.model_name = model_name
+        self.custom_trehsold  = 0.69
+        self.default_treshold = 0.69
+        self._eval_func = eval_func
+
+    def PredictProbabilities(self, words: list[str]) -> list[float]:
+        return [ self._eval_func(word) for word in words ]
 
 
 class _TextTagBindingProxy:
@@ -53,6 +92,9 @@ class _TextTagBindingProxy:
 
 class Application:
     def __init__(self):
+        self._models: dict[str, ModelParams] = dict()
+        self._load_models()
+
         window_extent = (800, 600)
         tk_root = tkint.Tk()
         tk_root.title("mordoria")
@@ -90,7 +132,8 @@ class Application:
         ctx_text_area.bind("<KeyRelease>", self.on_TextAreaKeyRelease )
         self.ctx_text_area = ctx_text_area
         self._last_textarea_contents = ""
-        self._last_textarea_model_reazults = None
+        self._last_textarea_tokenized = None
+        self._last_textarea_probabilities = None
         self._textarea_ttps : list[tktooltip.ToolTip] = list()
 
         # Scroll bar for text input
@@ -110,17 +153,19 @@ class Application:
         ctx_model_treshold.grid(row=0, column=1)
         ctx_model_treshold.set(0.69)
         # ctx_model_treshold.configure(command= lambda v: self.on_RedoTextAreaHighlighting() ) # This is way to laggy
-        ctx_model_treshold.bind("<ButtonRelease>", lambda e: self.on_RedoTextAreaHighlighting() )
+        ctx_model_treshold.bind("<ButtonRelease>", lambda e: self.on_ModelTresholdChange() )
         self.ctx_model_treshold = ctx_model_treshold
 
         # Model type
         frame_parambox_2 = tkint.Frame(frame_controlls, padx=5, pady=5, background='', highlightbackground="black", highlightthickness=1)
         frame_parambox_2.grid(column=0, row=1, padx=5, pady=5, sticky='nsew')
         tkint.Label(frame_parambox_2, text="Model type").grid(row=0, column=0)
-        ctx_model_type = tkintTtk.Combobox(frame_parambox_2, state="readonly", values=["LR - Logical Regression", "RF - Random Forest", "math.Random()", "Chat-GPT", "Some Indian"])
+        ctx_model_type = tkintTtk.Combobox(
+            frame_parambox_2, state="readonly", values= [ m_name for m_name in self._models.keys() ]
+        )
         ctx_model_type.current(0)
         ctx_model_type.grid(row=0, column=1)
-        ctx_model_type.bind("<<ComboboxSelected>>", lambda e: self.on_RedoTextAreaHighlighting() )
+        ctx_model_type.bind("<<ComboboxSelected>>", lambda e: self.on_ModelTypeChange() )
         self.ctx_model_type = ctx_model_type
 
         # Highlight full model output checkbox
@@ -135,21 +180,19 @@ class Application:
 
         # Reset params to default state
         ctx_button_reset_param = tkint.Button(frame_controlls, text="Reset parameters")
-        ctx_button_reset_param.configure(command= self.on_ResetModelParameter )
+        ctx_button_reset_param.configure(command= self.on_ResetModelParameters)
         ctx_button_reset_param.grid(padx=5, pady=5, sticky='nsew')
 
         # Debug show tokenization output
         ctx_button_dbg_tokens = tkint.Button(frame_controlls, text="Show tokenization")
         ctx_button_dbg_tokens.configure( command= self.on_HighlightTokenization )
         ctx_button_dbg_tokens.grid(padx=5, pady=5, sticky='nsew')
+        self._dbg_highlight = False
 
         # Manual eval button or something
         ctx_button_do_funny = tkint.Button(frame_controlls, text="Do the funny")
         ctx_button_do_funny.configure(command= lambda: log.debug("Manual update") or self.on_RedoTextAreaHighlighting() )
         ctx_button_do_funny.grid(padx=5, pady=5, sticky='nsew')
-
-        # import tktooltip
-        # ctx_ttip = tktooltip.ToolTip(ctx_button_do_funny, lambda: f"Mordoria {random.randint(0, 100)}")
 
         # # TAB 2
         # ctx_tab2 = tk.Frame(ctx_tab_navbar)
@@ -160,11 +203,35 @@ class Application:
         #     root_frame, text="Literary a second tab, this shit is insane", justify="left", font=font_title
         # ).pack(padx=5, pady=5, anchor="w")
 
-        self._dbg_highlight = False
+        self.on_ResetModelParameters()
         return
 
     def loop_blocking(self):
         self.tk_root.mainloop()
+
+    def _load_models(self):
+        this_path = os.path.dirname(os.path.abspath(__file__))
+        models_dir = os.path.join(this_path, 'packaged_models')
+        if not os.path.exists(models_dir):
+            os.makedirs(models_dir)
+
+        # todo: Download models if it doesnt exist
+        model_args = [
+            (ModelParams, "RF - Random Forest",      os.path.join(models_dir, "rf_v0_2_1.pkl")),
+            (ModelParams, "LR - Logical Regression", os.path.join(models_dir, "lr_v0_2_1.pkl")),
+        ]
+
+        self._models = {
+            model_name:
+                log.info(f"Loading model: {model_name}, from {os.path.basename(model_path)}")
+                or _LoaderClass(model_name, model_path)
+            for _LoaderClass, model_name, model_path in model_args
+        }
+
+        self._models[_dm1.model_name] = (
+            _dm1 := DummyModlelParams("Dummy model", lambda _w: min(1.0, (len(_w) / 10.0)) )
+        )
+        return
 
     # Helper UI functions
 
@@ -179,19 +246,12 @@ class Application:
 
     def highlight_textarea(self, text_contents: str | None = None):
         ctx_text_area = self.ctx_text_area
+        current_model = self.ctx_model_type.get()
 
-        def _weighting_functon(word: str) -> float:
-            return min(1.0, (len(word) / 10.0))
-
-        def _prob_to_color(prob: float) -> str:
-            color1 = (1.0, 0.0, 0.0)
-            color2 = (0.0, 1.0, 0.0)
-            mixed = (
-                int( 0xFF * pow(color1[0] * (1 - prob) + color2[0] * prob, 1.0 / 2.2) ),
-                int( 0xFF * pow(color1[1] * (1 - prob) + color2[1] * prob, 1.0 / 2.2) ),
-                0x00
-            )
-            return "#{:02x}{:02x}00".format(mixed[0], mixed[1])
+        model_params = self._models.get(current_model, None)
+        if model_params is None:
+            log.warning(f"Model {current_model} not found, what?")
+            return
 
         if text_contents is None:
             new_contents = ctx_text_area.get("1.0", tk.END)
@@ -205,18 +265,28 @@ class Application:
             ttp.destroy()
         self._textarea_ttps.clear()
 
+        # Do we need to retokenize?
+        do_contents_match = (self._last_textarea_contents == new_contents)
+        self._last_textarea_contents = new_contents
+
         # Perform text tagging if input has changed
-        model_treshold = self.ctx_model_treshold.get()
-        if self._last_textarea_model_reazults is not None and self._last_textarea_contents == new_contents:
-            log.debug("Reusing results")
-            tokenized, probabilities = self._last_textarea_model_reazults
+        if self._last_textarea_tokenized is not None and do_contents_match:
+            tokenized = self._last_textarea_tokenized
+        else:
+            tokenized = list(Application.tokenize_text(new_contents))
+            self._last_textarea_tokenized = tokenized
+
+        # Do we need to recompute probabilities?
+        if self._last_textarea_probabilities is not None and do_contents_match:
+            probabilities = self._last_textarea_probabilities
         else:
             self._last_textarea_contents = new_contents
-            tokenized = list(Application.tokenize_text(new_contents))
-            probabilities = [ _weighting_functon(token) for _, _, token in tokenized ]
-            self._last_textarea_model_reazults = tokenized, probabilities
+            only_words = [ token for _, _, token in tokenized ]
+            probabilities = model_params.PredictProbabilities(only_words) if len(only_words) > 0 else []
+            self._last_textarea_probabilities = probabilities
 
         # Apply tags to textarea
+        model_treshold = self.ctx_model_treshold.get()
         continuos_highlight = (self.var_do_highlight.get() == 1)
         for i, (idx_start, idx_end, token) in enumerate(tokenized):
             start_idx = f"1.0 + {idx_start} chars"
@@ -227,7 +297,7 @@ class Application:
             word_prob = probabilities[i]
             ctx_text_area.tag_add(tag_name, start_idx, end_idx)
             if continuos_highlight:
-                ctx_text_area.tag_config(tag_name, background=_prob_to_color(word_prob))
+                ctx_text_area.tag_config(tag_name, background=utils.prob_to_color(word_prob))
             elif model_treshold < word_prob:
                 ctx_text_area.tag_config(tag_name, underline=True, underlinefg="red")
 
@@ -240,9 +310,45 @@ class Application:
 
     # UI callbacks
 
-    def on_ResetModelParameter(self):
-        log.error("on_ResetModelParameter")
-        return
+    def on_ResetModelParameters(self):
+        log.error("on_ResetModelParameters")
+        current_model = self.ctx_model_type.get()
+
+        model_params = self._models.get(current_model, None)
+        if model_params is None:
+            log.warning(f"Model {current_model} not found, what?")
+            return
+
+        model_params.custom_trehsold = model_params.default_treshold
+        self.ctx_model_treshold.set(model_params.custom_trehsold)
+        self.var_do_highlight.set(0)
+        self.on_RedoTextAreaHighlighting()
+
+    def on_ModelTypeChange(self):
+        log.debug("on_ModelTypeChange")
+        current_model = self.ctx_model_type.get()
+
+        model_params = self._models.get(current_model, None)
+        if model_params is None:
+            log.warning(f"Model {current_model} not found, what?")
+            return
+
+        self.ctx_model_treshold.set(model_params.custom_trehsold)
+        self._last_textarea_probabilities = None # Invalidate cached probs.
+        self.on_RedoTextAreaHighlighting()
+
+    def on_ModelTresholdChange(self):
+        log.debug("on_ModelTresholdChange")
+        new_treshold = self.ctx_model_treshold.get()
+        current_model = self.ctx_model_type.get()
+
+        model_params = self._models.get(current_model, None)
+        if model_params is None:
+            log.warning(f"Model {current_model} not found, what?")
+            return
+
+        model_params.custom_trehsold = new_treshold
+        self.on_RedoTextAreaHighlighting()
 
     def on_RedoTextAreaHighlighting(self):
         log.debug("on_RedoTextAreaHighlighting")
@@ -251,6 +357,8 @@ class Application:
     def on_TextAreaKeyRelease(self, event: tkint.Event):
         # Only update if last keybind didnt make any textual changes
         if event.char != "":
+            return
+        if event.keysym == "BackSpace":
             return
 
         if self._dbg_highlight:
@@ -281,7 +389,7 @@ class Application:
             end_idx = f"1.0 + {idx_end} chars"
 
             # color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
-            color = "#FF7777"
+            color = "#FF8888"
             tag_name = f"word_{i}"
             ctx_text_area.tag_add(tag_name, start_idx, end_idx)
             ctx_text_area.tag_config(tag_name, background=color)
@@ -296,7 +404,6 @@ class Application:
         self._dbg_highlight = True
         return
 
-    ...
 
 
 def main():

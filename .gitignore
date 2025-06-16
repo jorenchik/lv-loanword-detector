@@ -5,5 +5,4 @@ plan.md
 **/*.egg-info/
 **/pretrained_models/
 /.idea/
-/packaged_models/
-
+/gui_integration/packaged_models/*.pkl
