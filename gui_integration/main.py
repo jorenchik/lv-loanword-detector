@@ -8,6 +8,7 @@ import concurrent.futures
 import dataclasses as dc
 from typing import Generator, Callable, Any
 
+from pathlib import Path
 import re
 
 # python tkinter docks : "https://anzeljg.github.io/rin2/book2/2405/docs/tkinter/"
@@ -219,15 +220,23 @@ class Application:
         self.tk_root.mainloop()
 
     def _load_models(self):
-        this_path = os.path.dirname(os.path.abspath(__file__))
-        models_dir = os.path.join(this_path, 'packaged_models')
-        if not os.path.exists(models_dir):
-            os.makedirs(models_dir)
+
+        this_path = Path(__file__).resolve().parent
+        packaged_dir = this_path / 'packaged_models'
+        user_dir = Path.home() / ".lv_loanword_detection" / "pretrained_models"
+        packaged_dir.mkdir(parents=True, exist_ok=True)
+        search_paths = [packaged_dir, user_dir]
+        def find_model(filename):
+            for directory in search_paths:
+                candidate = directory / filename
+                if candidate.exists():
+                    return candidate
+            raise FileNotFoundError(f"Model file '{filename}' not found in: {[str(p) for p in search_paths]}")
 
         # todo: Download models if it doesnt exist
         model_args = [
-            (ModelParams, "RF - Random Forest",      os.path.join(models_dir, "rf_v0_2_1.pkl")),
-            (ModelParams, "LR - Logical Regression", os.path.join(models_dir, "lr_v0_2_1.pkl")),
+            (ModelParams, "RF - Random Forest",      find_model("rf_v0_2_1.pkl")),
+            (ModelParams, "LR - Logical Regression", find_model("lr_v0_2_1.pkl")),
         ]
 
         self._models = {
