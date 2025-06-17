@@ -17,7 +17,7 @@ def prob_to_color(prob: float) -> str:
     color1 = (0.0, 1.0, 0.0)
     color2 = (1.0, 0.0, 0.0)
     mixed = (
-        int(0xFF * pow(color1[0] * (1 - prob) + color2[0] * prob, 1.0 / 2.2)),
+        int(0xFF * pow(color1[0] * (1 - prob) + color2[0] * prob, 1.0 / 2.2)), # Gamma correction :]
         int(0xFF * pow(color1[1] * (1 - prob) + color2[1] * prob, 1.0 / 2.2)),
         0x00
     )

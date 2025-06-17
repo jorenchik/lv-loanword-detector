@@ -2,6 +2,9 @@
 import os
 import sys
 import random
+import functools
+import threading
+import concurrent.futures
 import dataclasses as dc
 from typing import Generator, Callable, Any
 
@@ -22,21 +25,9 @@ import pandas as pd
 from classifier.train import LoanwordClassifier
 
 import gui_integration.utils as utils
-
-import concurrent.futures
-import threading
+import gui_integration.samples as text_samples
 
 log = utils.get_logger(__name__)
-
-
-_sample_text = """
-Whether we wanted it or not, we've stepped into a war with the
-Cabal on Mars. So let's get to taking out their command, one by
-one. Valus Ta'aurc. From what I can gather he commands the Siege
-Dancers from an Imperial Land Tank outside of Rubicon. He's well 
-protected, but with the right team, we can punch through those
-defenses, take this beast out, and break their grip on Freehold.
-""".lstrip('\n')
 
 
 @dc.dataclass(slots=True, init=False)
@@ -98,7 +89,7 @@ class Application:
         self._models: dict[str, ModelParams] = dict()
         self._load_models()
 
-        window_extent = (800, 600)
+        window_extent = (800, 450)
         tk_root = tkint.Tk()
         tk_root.title("mordoria")
         tk_root.geometry(f"{window_extent[0]}x{window_extent[1]}")
@@ -119,9 +110,19 @@ class Application:
         ctx_tab_navbar.add(ctx_tab1, text="  Text analizer  ")
         root_frame = ctx_tab1
 
+        # Examples
         tkint.Label(root_frame, text="Some title", justify="left", font=font_title).pack(padx=5, pady=5, anchor="w")
-        tkint.Button(root_frame, text="Some button").pack(side="bottom")
 
+        # Example sample text buttons
+        frame_parambox_42 = tkint.Frame(root_frame, padx=5, pady=5, background='', highlightbackground="black", highlightthickness=1)
+        frame_parambox_42.pack(side="bottom", fill="x")
+        tkint.Label(frame_parambox_42, text="Examples:") .pack(side="left")
+        for sample_name, sample_text in text_samples.sample_text_samples:
+            ctx_sample_btn = tkint.Button(frame_parambox_42, text=sample_name)
+            ctx_sample_btn.pack(side="left", padx=5, pady=1)
+            ctx_sample_btn.config(command= functools.partial(self.on_SetSampleText, sample_name, sample_text) )
+
+        # Main UI contents
         frame_contents = tkint.Frame(root_frame)
         frame_contents.pack()
 
@@ -131,8 +132,10 @@ class Application:
         ctx_text_area = tkint.Text(frame_text, width=64, height=16, wrap="word", autoseparators=True, undo=True, maxundo=-1)
         ctx_text_area.configure(tabs=tkintFont.Font(font=ctx_text_area["font"]).measure(" " * 4))  # tabsize 4
         ctx_text_area.pack(side="left")
-        ctx_text_area.insert("1.0", _sample_text)
         ctx_text_area.bind("<KeyRelease>", self.on_TextAreaKeyRelease )
+        if text_samples.default_sample is not None:
+            ctx_text_area.insert("1.0", text_samples.get_default_sample_text() )
+
         self.ctx_text_area = ctx_text_area
         self._last_textarea_contents = ""
         self._last_textarea_tokenized = None
@@ -193,7 +196,7 @@ class Application:
         self._dbg_highlight = False
 
         # Manual eval button or something
-        ctx_button_do_funny = tkint.Button(frame_controlls, text="Do the funny")
+        ctx_button_do_funny = tkint.Button(frame_controlls, text="Manual highlight")
         ctx_button_do_funny.configure(command= lambda: log.debug("Manual update") or self.on_RedoTextAreaHighlighting() )
         ctx_button_do_funny.grid(padx=5, pady=5, sticky='nsew')
 
@@ -250,7 +253,6 @@ class Application:
             yield (start, end, token_str)
         return None
 
-
     def highlight_textarea(self, text_contents: str | None = None):
         ctx_text_area = self.ctx_text_area
         current_model = self.ctx_model_type.get()
@@ -294,7 +296,7 @@ class Application:
                 0, self._on_prediction_ready, tokenized, fut
             ))
 
-    def _on_prediction_ready(self, tokenized, fut: concurrent.futures.Future):
+    def _on_prediction_ready(self, tokenized: list[tuple[int, int, str]], fut: concurrent.futures.Future):
         try:
             probabilities = fut.result()
         except Exception as e:
@@ -305,7 +307,7 @@ class Application:
             self._last_textarea_probabilities = probabilities
             self._apply_highlighting(tokenized, probabilities)
 
-    def _apply_highlighting(self, tokenized, probabilities):
+    def _apply_highlighting(self, tokenized: list[tuple[int, int, str]], probabilities: list[float]):
         ctx_text_area = self.ctx_text_area
 
         # Strip all current formating
@@ -332,13 +334,19 @@ class Application:
                 ctx_text_area.tag_config(tag_name, underline=True, underlinefg="red")
 
             # Word tooltip
-            _proxy: tkint.Widget = _TextTagBindingProxy(ctx_text_area, tag_name) # noqa
+            _proxy: tkint.Widget = _TextTagBindingProxy(ctx_text_area, tag_name) # noqa, Trust me bro, this is the righ type
             ttp = tktooltip.ToolTip(_proxy, f"{token}: {word_prob:.2f}" )
             self._textarea_ttps.append(ttp)
 
         return
 
     # UI callbacks
+
+    def on_SetSampleText(self, sample_name: str, sample_text: str):
+        log.debug(f"on_SetSampleText {sample_name}")
+        self.ctx_text_area.delete("1.0", "end")
+        self.ctx_text_area.insert("1.0", sample_text)
+        self.on_RedoTextAreaHighlighting()
 
     def on_ResetModelParameters(self):
         log.error("on_ResetModelParameters")
