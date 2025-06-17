@@ -2,13 +2,13 @@
 import os
 import sys
 import random
+import pathlib
 import functools
 import threading
 import concurrent.futures
 import dataclasses as dc
 from typing import Generator, Callable, Any
 
-from pathlib import Path
 import re
 
 # python tkinter docks : "https://anzeljg.github.io/rin2/book2/2405/docs/tkinter/"
@@ -220,13 +220,12 @@ class Application:
         self.tk_root.mainloop()
 
     def _load_models(self):
-
-        this_path = Path(__file__).resolve().parent
+        this_path = pathlib.Path(__file__).resolve().parent
         packaged_dir = this_path / 'packaged_models'
-        user_dir = Path.home() / ".lv_loanword_detection" / "pretrained_models"
+        user_dir = pathlib.Path.home() / ".lv_loanword_detection" / "pretrained_models"
         packaged_dir.mkdir(parents=True, exist_ok=True)
         search_paths = [packaged_dir, user_dir]
-        def find_model(filename):
+        def find_model(filename: str):
             for directory in search_paths:
                 candidate = directory / filename
                 if candidate.exists():
@@ -242,7 +241,7 @@ class Application:
         self._models = {
             model_name:
                 log.info(f"Loading model: {model_name}, from {os.path.basename(model_path)}")
-                or _LoaderClass(model_name, model_path)
+                or _LoaderClass(model_name, str(model_path))
             for _LoaderClass, model_name, model_path in model_args
         }
 
