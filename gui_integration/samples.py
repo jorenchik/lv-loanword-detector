@@ -27,6 +27,7 @@ Shitpost 3
 """)
 
 del reg_new
+default_sample = None if "default_sample" not in locals() else locals()["default_sample"]
 if default_sample is not None:
     assert any( s[0] == default_sample for s in sample_text_samples ), "Default sample is not real >>" + default_sample
 

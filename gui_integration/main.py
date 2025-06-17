@@ -114,7 +114,7 @@ class Application:
         tkint.Label(root_frame, text="Some title", justify="left", font=font_title).pack(padx=5, pady=5, anchor="w")
 
         # Example sample text buttons
-        frame_parambox_42 = tkint.Frame(root_frame, padx=5, pady=5, background='', highlightbackground="black", highlightthickness=1)
+        frame_parambox_42 = tkint.Frame(root_frame, padx=5, pady=5, background=root_frame["background"], highlightbackground="black", highlightthickness=1)
         frame_parambox_42.pack(side="bottom", fill="x")
         tkint.Label(frame_parambox_42, text="Examples:") .pack(side="left")
         for sample_name, sample_text in text_samples.sample_text_samples:
@@ -152,7 +152,7 @@ class Application:
         frame_controlls.grid(column=1, row=0, sticky="nsew")
 
         # Model treshold
-        frame_parambox_1 = tkint.Frame(frame_controlls, padx=5, pady=5, background='', highlightbackground="black", highlightthickness=1)
+        frame_parambox_1 = tkint.Frame(frame_controlls, padx=5, pady=5, highlightbackground="black", highlightthickness=1)
         frame_parambox_1.grid(column=0, row=0, padx=5, pady=5, sticky='nsew')
         tkint.Label(frame_parambox_1, text="Model \ntreshold").grid(row=0, column=0)
         ctx_model_treshold = tkint.Scale(frame_parambox_1, from_=0.0, to=1.0, digits=3, resolution=0.01, orient="horizontal", length=150)
@@ -163,7 +163,7 @@ class Application:
         self.ctx_model_treshold = ctx_model_treshold
 
         # Model type
-        frame_parambox_2 = tkint.Frame(frame_controlls, padx=5, pady=5, background='', highlightbackground="black", highlightthickness=1)
+        frame_parambox_2 = tkint.Frame(frame_controlls, padx=5, pady=5, highlightbackground="black", highlightthickness=1)
         frame_parambox_2.grid(column=0, row=1, padx=5, pady=5, sticky='nsew')
         tkint.Label(frame_parambox_2, text="Model type").grid(row=0, column=0)
         ctx_model_type = tkintTtk.Combobox(
@@ -175,10 +175,10 @@ class Application:
         self.ctx_model_type = ctx_model_type
 
         # Highlight full model output checkbox
-        frame_parambox_3 = tkint.Frame(frame_controlls, padx=5, pady=5, background='', highlightbackground="black", highlightthickness=1)
+        frame_parambox_3 = tkint.Frame(frame_controlls, padx=5, pady=5, highlightbackground="black", highlightthickness=1)
         frame_parambox_3.grid(column=0, row=2, padx=5, pady=5, sticky='nsew')
         var_do_highlight = tkint.IntVar()
-        ctx_do_highlight = tkint.Checkbutton(frame_parambox_3, onvalue=1, offvalue=0, text="Continuios highlight")
+        ctx_do_highlight = tkint.Checkbutton(frame_parambox_3, onvalue=1, offvalue=0, text="Highlight full output")
         ctx_do_highlight.grid(row=0, column=0)
         ctx_do_highlight.configure(variable= var_do_highlight, command= self.on_RedoTextAreaHighlighting )
         self.ctx_do_highlight = ctx_do_highlight
@@ -334,7 +334,7 @@ class Application:
                 ctx_text_area.tag_config(tag_name, underline=True, underlinefg="red")
 
             # Word tooltip
-            _proxy: tkint.Widget = _TextTagBindingProxy(ctx_text_area, tag_name) # noqa, Trust me bro, this is the righ type
+            _proxy: tkint.Widget = _TextTagBindingProxy(ctx_text_area, tag_name) # noqa, Trust me bro, this is the right type
             ttp = tktooltip.ToolTip(_proxy, f"{token}: {word_prob:.2f}" )
             self._textarea_ttps.append(ttp)
 
