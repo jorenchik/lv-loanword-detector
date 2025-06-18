@@ -1,6 +1,7 @@
 
 import os
 import sys
+import time
 import random
 import pathlib
 import functools
@@ -98,21 +99,23 @@ class Application:
 
         tk_default_font = tkintFont.nametofont("TkDefaultFont")
         font_title = tk_default_font.copy()
-        font_title.configure(size=12)
+        font_title.configure(size=11)
 
         root_frame = tkint.Frame(tk_root)
         root_frame.pack(padx=5, pady=5)
 
+        tk_style = tkintTtk.Style()
+        tk_style.configure('TNotebook.Tab', font=(tk_default_font.actual("family"), '11'))
         ctx_tab_navbar = tkintTtk.Notebook(root_frame)
         ctx_tab_navbar.pack(side="top", fill="x")
 
         # TAB 1
         ctx_tab1 = tk.Frame(ctx_tab_navbar)
-        ctx_tab_navbar.add(ctx_tab1, text="  Text analizer  ")
+        ctx_tab_navbar.add(ctx_tab1, text="  Text analyzer  ")
         root_frame = ctx_tab1
 
         # Examples
-        tkint.Label(root_frame, text="Some title", justify="left", font=font_title).pack(padx=5, pady=5, anchor="w")
+        tkint.Label(root_frame, text="Put your text here", justify="left", font=font_title).pack(padx=5, pady=5, anchor="w")
 
         # Example sample text buttons
         frame_parambox_42 = tkint.Frame(root_frame, padx=5, pady=5, background=root_frame["background"], highlightbackground="black", highlightthickness=1)
@@ -138,6 +141,7 @@ class Application:
             ctx_text_area.insert("1.0", text_samples.get_default_sample_text() )
 
         self.ctx_text_area = ctx_text_area
+        self._last_key_release_ts = 0.0
         self._last_textarea_contents = ""
         self._last_textarea_tokenized = None
         self._last_textarea_probabilities = None
@@ -401,14 +405,20 @@ class Application:
         self.highlight_textarea()
 
     def on_TextAreaKeyRelease(self, event: tkint.Event):
-        # Only update if last keybind didnt make any textual changes
-        if event.char != "":
+        if self._dbg_highlight:
             return
+
+        # Dont update if user is deleting text
         if event.keysym == "BackSpace":
             return
 
-        if self._dbg_highlight:
-            return
+        # Check time since last update if this is not a whitespace change
+        if event.char != "":
+            last_ts = self._last_key_release_ts
+            this_ts = time.time()
+            if (this_ts - last_ts) < 1.5:
+                return
+            self._last_key_release_ts = this_ts
 
         new_contents = self.ctx_text_area.get("1.0", tk.END)
         if self._last_textarea_contents == new_contents:
