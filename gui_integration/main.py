@@ -92,12 +92,23 @@ class Application:
         self._load_models()
 
         window_extent = (800, 450)
+        if sys.platform.startswith("linux"):
+            log.debug("Platform - Linux")
+            window_extent = (850, 450)
         tk_root = tkint.Tk()
         tk_root.title("mordoria")
         tk_root.geometry(f"{window_extent[0]}x{window_extent[1]}")
         self.tk_root = tk_root
 
         tk_default_font = tkintFont.nametofont("TkDefaultFont")
+        log.debug(str(tk_default_font.actual()))
+        # {'family': 'Segoe UI', 'size': 9, 'weight': 'normal', 'slant': 'roman', 'underline': 0, 'overstrike': 0}
+        if sys.platform.startswith("linux"):
+            try:
+                style = tkintTtk.Style()
+                style.theme_use('clam')
+            except Exception: pass
+
         font_title = tk_default_font.copy()
         font_title.configure(size=11)
 
@@ -361,7 +372,7 @@ class Application:
         self.on_RedoTextAreaHighlighting()
 
     def on_ResetModelParameters(self):
-        log.error("on_ResetModelParameters")
+        log.debug("on_ResetModelParameters")
         current_model = self.ctx_model_type.get()
 
         model_params = self._models.get(current_model, None)
