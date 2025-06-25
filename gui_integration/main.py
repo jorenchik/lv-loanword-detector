@@ -249,8 +249,8 @@ class Application:
 
         # todo: Download models if it doesnt exist
         model_args = [
-            (ModelParams, "RF - Random Forest",      find_model("rf_v0_2_1.pkl")),
-            (ModelParams, "LR - Logical Regression", find_model("lr_v0_2_1.pkl")),
+            (ModelParams, "RF - Random Forest"   ,      find_model("rf_v0_2_1.pkl")),
+            (ModelParams, "LR - Logistical Regression", find_model("lr_v0_2_1.pkl")),
         ]
 
         self._models = {
