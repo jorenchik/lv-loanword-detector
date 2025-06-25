@@ -1,8 +1,9 @@
 plan.md
 **/__pycache__
 **/build/
-**/data/
+**/data_local/
 **/*.egg-info/
 **/pretrained_models/
 /.idea/
 /gui_integration/packaged_models/*.pkl
+**/*.html
