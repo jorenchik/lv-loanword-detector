@@ -98,6 +98,8 @@ class Application:
         tk_root = tkint.Tk()
         tk_root.title("mordoria")
         tk_root.geometry(f"{window_extent[0]}x{window_extent[1]}")
+        # Floating window hint for window managers (awesome, i3, etc).
+        tk_root.attributes('-type', 'dialog')
         self.tk_root = tk_root
 
         tk_default_font = tkintFont.nametofont("TkDefaultFont")
