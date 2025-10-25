@@ -4,15 +4,21 @@ import argparse
 import os
 from sklearn.model_selection import train_test_split
 
+# TODO(Jorens): Make this one ONLY for labeling, split the other stuff into other.
+
 # === ARGUMENT PARSING ===
-parser = argparse.ArgumentParser(description="Label Latvian dictionary entries as loanwords or not.")
+parser = argparse.ArgumentParser(description="Label dictionary entries.")
+
 parser.add_argument('input', nargs='+', help='Path(s) to input CSV file(s).')
+
+# Labeling options.
 parser.add_argument('--debug', action='store_true', help='Output all columns instead of a minimal set.')
 parser.add_argument('--no-ocr', action='store_true', help='Disable OCR correction.')
 parser.add_argument('--no-multi-ref', action='store_true', help='Disable multi-reference resolution.')
-parser.add_argument('--make-full', action='store_true', help='Only merge inputs and write full CSV, no processing.')
+
 parser.add_argument('--output', type=str, default='entries_labeled.csv', help='Base output file name.')
 parser.add_argument('--source', type=str, default='etym_dict', help='Source label to attach to each row.')
+
 parser.add_argument('--output-dir', type=str, default='.', help='Directory to save output files.')
 parser.add_argument('--split', choices=['none', 'train_test', 'train_dev_test'], default='none', help='Split dataset into train/test or train/dev/test.')
 parser.add_argument('--test-size', type=float, default=0.15, help='Proportion of test data.')
@@ -38,11 +44,6 @@ def save_df(df_subset, suffix):
 # === MAIN ===
 df_list = [pd.read_csv(path) for path in args.input]
 df = pd.concat(df_list, ignore_index=True)
-
-if args.make_full:
-    os.makedirs(output_dir, exist_ok=True)
-    save_df(df, 'full')
-    exit(0)
 
 # === Handle already-labeled format ===
 if 'is_loanword' in df.columns and 'text' not in df.columns:
