@@ -1,139 +1,115 @@
 import re
 import csv
 import argparse
+from tqdm import tqdm
 
-LANG_HEADER = re.compile(r"^==[A-Z][A-Za-z ]+==")
-ETYMOLOGY_HEADER = re.compile(r"^===Etymology")
+# LANG_HEADER = re.compile(r"^==[A-Z][A-Za-z ]+==")
+LANG_HEADER = re.compile(r"(^|[^=])==([A-Za-z ]+)==")
+HEADER = re.compile(r"===([A-Za-z ]+)===")
+SECTION_HEADER = re.compile(r"^===")
 TITLE_TAG = re.compile(r"<title>(.*?)</title>")
-TEMPLATE_RE = re.compile(r"\{\{([^{}]+)\}\}")
+# TITLE_TAG = re.compile(r"<title>(.*?)</title>")
+# TEMPLATE_RE = re.compile(r"\{\{([^{}]+)\}\}")
+# TITLE_TAG = re.compile(r"<title>")
 
-def extract_templates(text: str):
-    matches = TEMPLATE_RE.findall(text)
-    templates = []
-    for m in matches:
-        parts = [p.strip() for p in m.split("|") if p.strip()]
-        templates.append(parts)
-    return templates
-
+LEXICAL_HEADERS = (
+    "Noun",
+    "Verb",
+    "Adjective",
+    "Adverb",
+    "Pronoun",
+    "Participle",
+    "Determiner",
+    "Interjection",
+    "Proper noun",
+    "Preposition",
+    "Suffix",
+)
 
 def valid_word(word: str, allow_cyrillic: bool = False) -> bool:
     latin_lv = r"A-Za-zĀĒĪŪĶĻŅŠŽāēīūķļņšž\-"
-    cyr = r"\u0400-\u04FF\u0500-\u052F\u2DE0-\u2DFF\uA640-\uA69F"  # Cyrillic range
+    cyr = r"\u0400-\u04FF\u0500-\u052F\u2DE0-\u2DFF\uA640-\uA69F"
     charset = latin_lv + (cyr if allow_cyrillic else "")
-
-    charset_match = re.fullmatch(fr"[{charset}]+", word) is not None
-    long_enough = len(word) > 2
-
-    return charset_match and long_enough
+    return re.fullmatch(fr"[{charset}]+", word) and len(word) > 2
 
 
-def extract_latvian_etymology(
-    filename: str, csv_out: str, filename_non_lv: str, allow_cyrillic: bool = False
-) -> None:
-    inside_latvian = False
-    inside_etymology = False
+def extract_latvian_data(filename: str, csv_out: str, allow_cyrillic: bool = False):
+
+    word_content = None
     buffer = []
-    current_word = None
+    debug_buffer = []
+
+    inside_lv = False
+    inside_etym = False
+    lv_line = None
+    prev_title = None
+    word = None
 
     with (
         open(filename, "r", encoding="utf-8", errors="ignore") as f,
-        open(csv_out, "w", encoding="utf-8") as out,
-        open(filename_non_lv, "w", encoding="utf-8") as out_non_lv,
+        open(csv_out, "w", encoding="utf-8", newline="") as out
     ):
+        writer = csv.writer(out)
+        writer.writerow(["line", "word", "text"])
+
+        for line_num, line in tqdm(enumerate(f, start=1)):
+
+            if TITLE_TAG.search(line):
+                prev_title = line_num
+                res = TITLE_TAG.search(line)
+                word = res.group(1)
+
+            # if line_num < 1000000:
+            #     continue
+
+            # if line_num > 2000000:
+            #     break
+
+            if LANG_HEADER.match(line):
+
+                res = LANG_HEADER.search(line)
+                lang = res.group(2)
+
+                if inside_lv:
+                    etymology = re.sub(r"\s+", " ", " ".join(buffer)).strip()
+                    writer.writerow([prev_title, line_num, word, word_content, etymology])
+
+                if lang == "Latvian":
+                    inside_lv = True
+                else:
+                    inside_lv = False 
 
 
-        print(out, out_non_lv)
-        writer = csv.writer(out, delimiter=",", quotechar='"')
-        writer.writerow(["word", "etymology"])
-
-        writer_non_lv = csv.writer(out_non_lv, delimiter=",", quotechar='"')
-        writer_non_lv.writerow(["word", "etymology"])
-
-        for line in f:
-            # track title
-            if "<title>" in line:
-                m = TITLE_TAG.search(line)
-                if m:
-                    current_word = m.group(1).strip()
-                continue
-
-            # start Latvian section
-            if line.strip() == "==Latvian==":
-                inside_latvian = True
-                inside_etymology = False
+                lv_line = line_num
+                word_content = None
                 buffer.clear()
+                debug_buffer.clear()
+
+                inside_etym = False 
                 continue
 
-            # new language section
-            if inside_latvian and LANG_HEADER.match(line):
-                inside_latvian = False
-                inside_etymology = False
-                buffer.clear()
-                continue
+            if HEADER.match(line):
 
-            if not inside_latvian:
-                continue
+                res = HEADER.search(line)
+                name = res.group(1)
 
-            # etymology section start
-            if ETYMOLOGY_HEADER.match(line):
-                inside_etymology = True
-                buffer.clear()
-                continue
-
-            # any new header inside language ends etymology
-            if inside_etymology and line.startswith("===") and not ETYMOLOGY_HEADER.match(
-                line
-            ):
-                text = " ".join(line.strip() for line in buffer if line.strip())
-                templates = extract_templates(text)
-                latvianized = False 
-
-                if len(templates) > 0:
-                    if len(templates[0]) > 1:
-                        latvianized = templates[0][1] == "lv"
-            
-                if text and current_word and valid_word(current_word, allow_cyrillic):
-                    if latvianized:
-                        writer.writerow([current_word, text])
+                if inside_lv:
+                    if name == "Etymology":
+                        inside_etym = True
+                        continue
                     else:
-                        writer_non_lv.writerow([current_word, text])
+                        inside_etym = False 
 
-                inside_etymology = False
-                buffer.clear()
-                continue
-
-            # accumulate etymology text
-            if inside_etymology:
+            if inside_etym:
                 buffer.append(line)
-
-        # flush buffer if file ends inside etymology
-        if inside_etymology and buffer and current_word:
-            text = "".join(buffer).strip()
-            if text and valid_word(current_word, allow_cyrillic):
-                writer.writerow([current_word, text])
-
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("xml", help="Path to Wiktionary XML dump")
-    parser.add_argument(
-        "--out",
-        default="latvian_etymology.csv",
-        help="Output CSV (tab separated)",
-    )
-    parser.add_argument(
-        "--out-non-lv",
-        default="non_latvian_etymology.csv",
-        help="Output CSV (tab separated)",
-    )
-    parser.add_argument(
-        "--allow-cyrillic",
-        action="store_true",
-        help="Accept words containing Cyrillic characters",
-    )
-
+    parser.add_argument("xml")
+    parser.add_argument("--out", default="latvian_extracted.csv")
+    parser.add_argument("--allow-cyrillic", action="store_true")
     args = parser.parse_args()
-    extract_latvian_etymology(args.xml, args.out, args.out_non_lv, allow_cyrillic=args.allow_cyrillic)
+    extract_latvian_data(args.xml, args.out, allow_cyrillic=args.allow_cyrillic)
 
 
 if __name__ == "__main__":
