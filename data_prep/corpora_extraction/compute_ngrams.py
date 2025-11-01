@@ -6,6 +6,7 @@ from itertools import islice, product
 from statistics import mean, stdev
 
 # --- Helper ---
+
 def extract_ngrams(seq, n):
     return zip(*(islice(seq, i, None) for i in range(n)))
 

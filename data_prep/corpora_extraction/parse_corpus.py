@@ -1,11 +1,12 @@
-import stanza
-from lxml import etree as ET
+
 import argparse
 import os
 import gzip
-from tqdm import tqdm
-import re
 import csv
+import stanza
+
+from tqdm import tqdm
+from lxml import etree as ET
 
 # --- Step 1: Argument parsing ---
 parser = argparse.ArgumentParser(description="Parse Latvian TEI XML, VERT, TXT, or CSV format and tokenize text.")
@@ -27,11 +28,19 @@ input_path = args.input_file
 latvian_texts = []
 
 if args.format == "vert":
+    
+    # Either plain or archive (.gz) open.
     open_func = gzip.open if input_path.endswith(".gz") else open
+
+    # Count lines.
     with open_func(input_path, mode='rt', encoding='utf-8') as f:
         total_lines = sum(1 for _ in f)
 
-    with open_func(input_path, mode='rt', encoding='utf-8') as f, tqdm(total=total_lines, desc="Reading VERT file") as pbar:
+    # Extract tokens (\t separation).
+    with (
+        open_func(input_path, mode='rt', encoding='utf-8') as f,
+        tqdm(total=total_lines, desc="Reading VERT file") as pbar
+    ):
         for line in f:
             if line.strip() and not line.startswith('<'):
                 parts = line.strip().split('\t')
@@ -40,11 +49,15 @@ if args.format == "vert":
             pbar.update(1)
 
 elif args.format == "lv_disertacijas_txt":
+
     open_func = gzip.open if input_path.endswith(".gz") else open
+
     with open_func(input_path, mode="rt", encoding="utf-8") as f:
         lines = f.readlines()
+
     inside_doc = False
     for line in tqdm(lines, desc="Parsing TXT lv_disertacijas_txt"):
+
         line = line.strip()
         if not line:
             continue
@@ -60,7 +73,9 @@ elif args.format == "lv_disertacijas_txt":
             latvian_texts.append(line)
 
 elif args.format == "rainis_txt":
+
     open_func = gzip.open if input_path.endswith(".gz") else open
+
     with open_func(input_path, mode="rt", encoding="utf-8") as f:
         lines = f.readlines()
     for line in tqdm(lines, desc="Parsing TXT rainis_txt"):
@@ -69,7 +84,9 @@ elif args.format == "rainis_txt":
             latvian_texts.append(line)
 
 elif args.format == "lava_csv":
+
     open_func = gzip.open if input_path.endswith(".gz") else open
+
     with open_func(input_path, mode='rt', encoding='utf-8', newline='') as csvfile:
         reader = csv.DictReader(csvfile)
         current_essay_id = None
@@ -91,15 +108,26 @@ elif args.format == "lava_csv":
             latvian_texts.append(" ".join(current_tokens))
 
 elif args.format == "senie_xml":
+
     parser = ET.XMLParser(recover=True)
-    context = ET.iterparse(input_path, events=("end",), tag="{http://www.tei-c.org/ns/1.0}div", recover=True)
+    context = ET.iterparse(
+        input_path,
+        events=("end",),
+        tag="{http://www.tei-c.org/ns/1.0}div",
+        recover=True,
+    )
+
     for event, elem in tqdm(context, desc="Parsing XML senie_xml"):
-        if elem.get("type") == "Language" and elem.get("lang") == "Latvian" and elem.text:
+        if (
+            elem.get("type") == "Language" and
+            elem.get("lang") == "Latvian" and
+            elem.text
+        ):
             latvian_texts.append(elem.text.strip())
         elem.clear()
 
 else:
-    raise ValueError("Unsupported format.")
+    raise ValueError("Unsupported format: " + args.format)
 
 # --- Step 4: Tokenize and write in chunks ---
 BATCH_SIZE = 1000
