@@ -11,22 +11,21 @@ ABBT_EXP_RE = re.compile(r"[^a-zāčēģīķļņšūž.]", re.IGNORECASE)
 
 # CUE index.
 LEV_CUES = {
-
     # Borrowings.
-    "scandinavian": ["d.", "norv.", "zv.", "island.", "sisl.", "ssk.", "szv.", "sv."], # maybe. ssak., sensak?
-    "germanic":     ["v.", "germ.", "ang.", "vv.", "vlv.", "bv.", "lv.", "sav.", "vav."
-                    "sfrī.", "h.", "hol."],
-    "romance":    	["lat.", "jlat.", "it.", "fr.", "rum.", "sfr.", "f.", ".vlat"],
-    "greek":	    ["gr." ],
-    "uralic":	    ["somu", "s‑u.", "ung.", "ig.", "līb." ],
-    "slavic":	    ["kr.", "k.", "skr.", "sl.", "ukr.", "p.", "bulg.", "č", "ssl"],
+    "north-germanic": ["d.", "norv.", "zv.", "island.", "sisl.", "ssk.", "szv.", "sv."], # AKA. Scandinavian; maybe also ssak., sensak?
+    "west-germanic":  ["v.", "germ.", "ang.", "vv.", "vlv.", "bv.", "lv.", "sav.", "vav.", "sfrī.", "h.", "hol."],
+    "romance":    	  ["lat.", "jlat.", "it.", "fr.", "rum.", "sfr.", "f.", ".vlat"],
+    "greek":	      ["gr." ],
+    "uralic":	      ["somu", "s‑u.", "ung.", "ig.", "līb." ],
+    "slavic":	      ["kr.", "k.", "skr.", "sl.", "ukr.", "p.", "bulg.", "č", "ssl"],
 
     # Native classes.
-    # "latvian":       [],
-    "baltic":	    ["apv.", "la.", "b.", "ab.", "lš.", "pr.",
-                     "narev.", "kurs.", "kursen."], # atv. (add retrieval for atv.?)
-    "indoeuropean": ["ide.", "pirmside.", "indoeiropiešu", "lde."],
+    "baltic":	      ["apv.", "la.", "b.", "ab.", "lš.", "pr.", "narev.", "kurs.", "kursen."], # atv. (add retrieval for atv.?)
+    "indoeuropean":   ["ide.", "pirmside.", "indoeiropiešu", "lde."],
 }
+
+
+print(LEV_CUES.keys())
 
 SUB_CUES = ["jaunvārds"]
 
@@ -45,10 +44,9 @@ for group, cues in LEV_CUES.items():
 
 # CLI args.
 parser = argparse.ArgumentParser(description="Label origins.")
-parser.add_argument('input', help='Path(s) to input CSV file(s).')
+parser.add_argument('input', help='Path to input CSV file.')
+parser.add_argument('output', help='Path to output CSV file.')
 args = parser.parse_args()
-
-print(args.input)
 
 def label(cues, inv_lev_cues):
 
@@ -83,9 +81,12 @@ def label(cues, inv_lev_cues):
     # return {"unknown"}
 
 
-with open(args.input, newline='') as csvfile:
+with (
+    open(args.input, newline='') as in_,
+    open(args.output, "w", newline='') as out_,
+):
 
-    spamreader = csv.reader(csvfile, delimiter=',', quotechar='"')
+    spamreader = csv.reader(in_, delimiter=',', quotechar='"')
     cols = spamreader.__next__()
 
     # RANGE = [400,500]
@@ -102,7 +103,6 @@ with open(args.input, newline='') as csvfile:
         headword = row[cols.index("headword")]
         text = row[cols.index("text")]
 
-
         cues = []
         for w in text.split():
             candidate = w.lower()
@@ -114,8 +114,11 @@ with open(args.input, newline='') as csvfile:
         origin_counter.update(origin)
         loanword_counter.update({is_loanword})
 
-        show = origin == {"unknown"}
+        
+# 130612146,Latvian,medicīna,{'romance'},"[['uder', 'lv', 'la', 'medicīna', '', ""the healing art, medicine, a physician's shop, a remedy, medicine""], ['m', 'la', 'medicinus', '', 'of or belonging to physic or surgery, or to a physician or surgeon'], ['m', 'la', 'medicus', '', 'a physician, surgeon'], ['m', 'la', 'medeor', '', 'I heal']]"
 
+        # DEBUG.
+        show = origin == {"unknown"}
         if show:
             print(
                 headword,
