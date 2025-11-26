@@ -31,13 +31,17 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["classifier", "integration", "scripts", "gui_integration"]
+include = ["integration", "scripts", "gui_integration", "classifiers"]
 
 [project.scripts]
-lv-loanword-classify = "classifier.classify:main"
-lv-loanword-example  = "integration.example:main"
-lv-loanword-download = "scripts.download_models:main"
-lv-loanword-gui      = "gui_integration.main:main"
+lvw-classify  = "classifier.classify:main"
+lvw-example   = "integration.example:main"
+lvw-download  = "scripts.download_models:main"
+lvw-gui       = "gui_integration.main:main"
+lvw-train-lm  = "classifiers.lm_rnn.train_:main"
+lvw-train-gru = "classifiers.rnn.train_:main"
+lvw-train-cnn = "classifiers.rnn.train_cnn:main"
+lvw-encode    = "classifiers.lm_rnn.encode_word:main"
 
 [project.optional-dependencies]
 stanza = ["stanza>=1.10.0"]

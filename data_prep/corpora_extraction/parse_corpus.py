@@ -4,6 +4,7 @@ import os
 import gzip
 import csv
 import stanza
+import torch
 
 from tqdm import tqdm
 from lxml import etree as ET
@@ -11,8 +12,8 @@ from lxml import etree as ET
 # --- Step 1: Argument parsing ---
 parser = argparse.ArgumentParser(description="Parse Latvian TEI XML, VERT, TXT, or CSV format and tokenize text.")
 parser.add_argument("input_file", help="Path to the input file (.xml, .vert, .vert.gz, .txt, .txt.gz, .csv, .csv.gz)")
-parser.add_argument("--output_file", default="parsed_latvian_tokens.txt", help="Path to the output file")
-parser.add_argument("--use_gpu", action="store_true", help="Enable GPU acceleration for Stanza")
+parser.add_argument("output_file", help="Path to the output file")
+# parser.add_argument("--use-gpu", action="store_true", help="Enable GPU acceleration for Stanza")
 parser.add_argument("--format", choices=["lv_disertacijas_txt", "rainis_txt", "lava_csv", "senie_xml", "vert"],
                     required=True,
                     help="Specify the input format explicitly")
@@ -21,7 +22,12 @@ args = parser.parse_args()
 # --- Step 2: Load Stanza Latvian model ---
 if not os.path.exists(os.path.expanduser("~/.stanza_resources/lv")):
     stanza.download('lv')
-nlp = stanza.Pipeline(lang='lv', processors='tokenize', use_gpu=args.use_gpu)
+cuda_available = torch.cuda.is_available()
+if cuda_available:
+    print("[I] CUDA is available, using GPU")
+else:
+    print("[I] CUDA is not available, using CPU")
+nlp = stanza.Pipeline(lang='lv', processors='tokenize', use_gpu=cuda_available)
 
 # --- Step 3: Determine file type and extract text ---
 input_path = args.input_file
@@ -130,7 +136,7 @@ else:
     raise ValueError("Unsupported format: " + args.format)
 
 # --- Step 4: Tokenize and write in chunks ---
-BATCH_SIZE = 1000
+BATCH_SIZE = 1000 
 
 with open(args.output_file, "w", encoding="utf-8") as out_f:
     for i in tqdm(range(0, len(latvian_texts), BATCH_SIZE), desc="Tokenizing"):
@@ -138,6 +144,6 @@ with open(args.output_file, "w", encoding="utf-8") as out_f:
         doc = nlp(batch_text)
         for sentence in doc.sentences:
             for word in sentence.words:
-                out_f.write(f"<{word.text}>\n")
+                out_f.write(f"{word.text}\n")
 
 print(f"Tokenized words saved to {args.output_file}")

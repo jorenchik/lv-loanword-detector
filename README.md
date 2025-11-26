@@ -1,4 +1,6 @@
 
+// TODO: update this. 
+
 # Latvian loanword detector
 
 A modular system for detecting potential loanwords in Latvian text using

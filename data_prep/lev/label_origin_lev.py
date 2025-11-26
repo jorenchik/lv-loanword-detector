@@ -5,7 +5,7 @@ from collections import Counter
 import re
 
 origin_counter = Counter()
-loanword_counter = Counter()
+# loanword_counter = Counter()
 
 ABBT_EXP_RE = re.compile(r"[^a-zāčēģīķļņšūž.]", re.IGNORECASE)
 
@@ -14,18 +14,29 @@ LEV_CUES = {
     # Borrowings.
     "north-germanic": ["d.", "norv.", "zv.", "island.", "sisl.", "ssk.", "szv.", "sv."], # AKA. Scandinavian; maybe also ssak., sensak?
     "west-germanic":  ["v.", "germ.", "ang.", "vv.", "vlv.", "bv.", "lv.", "sav.", "vav.", "sfrī.", "h.", "hol."],
-    "romance":    	  ["lat.", "jlat.", "it.", "fr.", "rum.", "sfr.", "f.", ".vlat"],
+    "romance":    	  ["lat.", "jlat.", "it.", "fr.", "rum.", "sfr.", "f.",  "vlat."],
     "greek":	      ["gr." ],
-    "uralic":	      ["somu", "s‑u.", "ung.", "ig.", "līb." ],
+
     "slavic":	      ["kr.", "k.", "skr.", "sl.", "ukr.", "p.", "bulg.", "č", "ssl"],
 
     # Native classes.
-    "baltic":	      ["apv.", "la.", "b.", "ab.", "lš.", "pr.", "narev.", "kurs.", "kursen."], # atv. (add retrieval for atv.?)
-    "indoeuropean":   ["ide.", "pirmside.", "indoeiropiešu", "lde."],
+    "baltic":	      ["apv.", "la.", "b.", "ab.", "lš.", "pr.", "narev.", "kurs.", "kursen.", "rb."], # atv. (add retrieval for atv.?)
+    "ide":            ["ide.", "pirmside.", "indoeiropiešu", "lde."],
+
+    # Non‑IE
+    "uralic": ["somu", "s-u.", "s.", "ung.", "ig.", "līb.", "ural."],
+    # "uralic": ["somu", "s-u.", "s.", "ung.", "līb."],
+    "etruscan": ["etr."],
+    "semitic": ["he.", "sebr."],
+
+    # Indo‑European subfamilies actually present
+    "indo-iranian": ["ir.", "jr.", "spers.", "oset.", "tadž.", "rer.", "rir.", "si.", "afg.", "pers."],
+    "armenian": ["arm."],
+    "albanian": ["alb."],
+    "illyrian": ["illīr."],
+    "thracian": ["trāķ."],
+    "tocharian": ["toh."],
 }
-
-
-print(LEV_CUES.keys())
 
 SUB_CUES = ["jaunvārds"]
 
@@ -46,6 +57,7 @@ for group, cues in LEV_CUES.items():
 parser = argparse.ArgumentParser(description="Label origins.")
 parser.add_argument('input', help='Path to input CSV file.')
 parser.add_argument('output', help='Path to output CSV file.')
+parser.add_argument('--debug', action="store_true")
 args = parser.parse_args()
 
 def label(cues, inv_lev_cues):
@@ -56,15 +68,16 @@ def label(cues, inv_lev_cues):
         if g:
             groups.append(g)
     if not groups:
-        return {"unknown"}, None 
+        return {"unknown"}
 
     group_cnt = Counter(groups)
     group_set = set(groups)
 
-    is_loanword = not ({"baltic", "indoeuropean"} <= group_set)
+    # is_loanword = not ({"baltic", "indoeuropean"} <= group_set)
 
-    return group_set, is_loanword
+    return group_set
 
+    # TODO: remove.
     # if "indoeuropean" in group_set:
     #     return {"indoeuropean"}
     #
@@ -86,8 +99,13 @@ with (
     open(args.output, "w", newline='') as out_,
 ):
 
+    # Setup reader.
     spamreader = csv.reader(in_, delimiter=',', quotechar='"')
     cols = spamreader.__next__()
+
+    # Setup writer.
+    writer = csv.writer(out_)
+    writer.writerow(["word", "origin"])
 
     # RANGE = [400,500]
     RANGE = None
@@ -110,25 +128,26 @@ with (
             if candidate in inv_lev_cues or candidate in SUB_CUES:
                 cues.append(candidate)
 
-        origin, is_loanword = label(cues, inv_lev_cues)
+        origin = label(cues, inv_lev_cues)
         origin_counter.update(origin)
-        loanword_counter.update({is_loanword})
+        # loanword_counter.update({is_loanword})
 
-        
-# 130612146,Latvian,medicīna,{'romance'},"[['uder', 'lv', 'la', 'medicīna', '', ""the healing art, medicine, a physician's shop, a remedy, medicine""], ['m', 'la', 'medicinus', '', 'of or belonging to physic or surgery, or to a physician or surgeon'], ['m', 'la', 'medicus', '', 'a physician, surgeon'], ['m', 'la', 'medeor', '', 'I heal']]"
+        # convert origin set to a stable string representation
+        origin_str = "|".join(sorted(origin))
+        writer.writerow([headword, origin_str]) 
 
         # DEBUG.
         show = origin == {"unknown"}
-        if show:
+        if args.debug and show:
             print(
                 headword,
                 "cues: " + ', '.join(cues),
                 "label: " + str(origin),
-                "is_loanword: " + str(is_loanword),
                 text,
                 "__________________",
                 sep="\n"
             )
 
+print("[I] Summary...")
 print(origin_counter)
-print(loanword_counter)
+# print(loanword_counter)
