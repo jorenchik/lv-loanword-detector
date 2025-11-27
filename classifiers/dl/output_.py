@@ -11,11 +11,11 @@ from classifiers.dl.models_ import (
     evaluate_multiclass,
     evaluate_binary,
     evaluate_multilabel,
+    evaluate_charlm,
 )
 from classifiers.dl.task_config import (
     TaskConfig,
 )
-
 
 def setup_output_dir(base_name: str) -> Path:
 
@@ -192,6 +192,17 @@ def output_evaluation(model, train_config, task_config, loader, device, threshol
                 'f_beta': fb.cpu().numpy(),
             },
             metrics_file
+        )
+
+    elif task_config.task_type == "charlm":
+
+        log.info(f"Best epoch: {best_epoch}, dev_loss: {best_dev_loss:.4f}, dev_perplexity: {best_dev_perplexity:.2f}")
+        test_loss, test_perplexity, test_bpc = evaluate_charlm(
+            model, test_loader, criterion, device
+        )
+        log.info(
+            f"Test set evaluation for CharLM: "
+            f"Loss={test_loss:.4f}, Perplexity={test_perplexity:.2f}, BPC={test_bpc:.2f}"
         )
 
     elif task_config.task_type == "binary":

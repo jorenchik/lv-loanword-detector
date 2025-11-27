@@ -88,11 +88,27 @@ class CharLanguageModel(nn.Module):
         logits = self.fc_out(out)
         return logits, hidden
 
-    def encode(self, x):
-        """Extract RNN hidden states for use as encoder."""
+    def encode(self, x, pool: str | None = None):
+        """
+        Extract RNN hidden states for use as encoder.
+        pool=None (default) preserves old behavior → returns [B, T, H].
+        pool='mean' → mean pooling
+        pool='last' → last hidden vector
+        """
         emb = self.embedding(x)
-        out, _ = self.rnn(emb)
-        return out  # (batch, seq_len, hidden_dim)
+        out, hidden = self.rnn(emb)
+
+        # Backward-compatible default: same tensor shape as before
+        if pool is None:
+            return out
+        elif pool == "mean":
+            return out.mean(dim=1)
+        elif pool == "last":
+            if isinstance(hidden, tuple):  # for LSTM
+                hidden = hidden[0]
+            return hidden[-1]
+        else:
+            raise ValueError(f"Unknown pool mode: {pool}")
 
     def generate(self, start_seq, max_len=100, temperature=1.0):
         """
@@ -230,7 +246,7 @@ class CNNClassifier(nn.Module):
 
         if self.charlm_encoder is not None:
             with torch.set_grad_enabled(self.charlm_encoder.training):
-                emb = self.charlm_encoder.encode(x).transpose(1, 2)
+                emb = self.charlm_encoder.encode(x, pool=None).transpose(1, 2)
         elif self.embedding is not None:
             emb = self.embedding(x).transpose(1, 2)
         else:
@@ -546,3 +562,30 @@ class TopNModels:
     def get_best_path(self) -> Path:
         """Return path to best model."""
         return min(self.models, key=lambda x: x[0])[2]
+
+
+def evaluate_charlm(model, loader, criterion, device):
+
+    model.eval()
+    total_loss = 0.0
+    total_chars = 0
+
+    with torch.no_grad():
+        for x in tqdm(loader, desc="Evaluating CharLM"):
+            x = x.to(device)
+            logits, _ = model(x[:, :-1]) # Predict from x up to second-to-last char
+            targets = x[:, 1:]           # Target is from second char to last char
+
+            # Flatten outputs and targets for loss calculation
+            loss = criterion(
+                logits.reshape(-1, logits.size(-1)),
+                targets.reshape(-1)
+            )
+            total_loss += loss.item() * x.size(0) # Accumulate loss weighted by batch size
+            total_chars += targets.numel() # Total number of characters in the batch
+
+    avg_loss = total_loss / total_chars
+    perplexity = math.exp(avg_loss) # Perplexity is e^avg_loss (if using NLL)
+    bpc = avg_loss / math.log(2)    # BPC is avg_loss / log(2)
+
+    return avg_loss, perplexity, bpc
