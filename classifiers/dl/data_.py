@@ -98,16 +98,13 @@ class OriginDataset(Dataset):
     def __getitem__(self, i):
         return self.x[i], self.y[i]
 
-def collate_lm(batch, max_len: int, use_byt5 = False):
-
+def collate_lm(batch, max_len: int, byt5_tokenizer = None):
     B = len(batch)
-    padded = torch.zeros(B, max_len, dtype=torch.long)
+    padded = torch.full((B, max_len), unk, dtype=torch.long)
     for i, seq in enumerate(batch):
         L = min(len(seq), max_len)
         padded[i, :L] = seq[:L]
-
     x_out = padded
-
     return x_out
 
 def collate(batch, max_len: int, byt5_tokenizer=None):

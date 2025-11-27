@@ -43,8 +43,8 @@ def get_model_config(
                 "embed_dim": 64,
                 "hidden_dim": 64,
                 "num_layers": 2,
-                "dropout": 0.4,
-                "rnn_dropout": 0.5,
+                "dropout": 1, # .4
+                "rnn_dropout": 1, # .3
             }
         },
         "is_loanword": {
@@ -120,15 +120,26 @@ def get_model_config(
                 "fc_layers": [512, 256],
                 "use_batch_norm": True,
             },
+            # "charlm": {
+            #     "embed_dim": charlm_hidden_dim,
+            #     "hidden_dim": 256,
+            #     "num_layers": 2,
+            #     "dropout": 0.4,
+            #     "rnn_dropout": 0.4,
+            #     "kernel_sizes": [3, 4, 5, 6],
+            #     "num_filters": [128, 128, 64, 64],
+            #     "fc_layers": [256, 128],
+            #     "use_batch_norm": False,
+            # },
             "charlm": {
                 "embed_dim": charlm_hidden_dim,
-                "hidden_dim": 256,
+                "hidden_dim": 128,
                 "num_layers": 2,
-                "dropout": 0.4,
+                "dropout": 0.2,
                 "rnn_dropout": 0.4,
-                "kernel_sizes": [3, 4, 5, 6],
-                "num_filters": [128, 128, 64, 64],
-                "fc_layers": [256, 128],
+                "kernel_sizes": [3, 4],
+                "num_filters": [128, 64],
+                "fc_layers": [64, 32],
                 "use_batch_norm": False,
             },
         },

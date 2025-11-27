@@ -137,6 +137,59 @@ def interactive_mode(model, task_config, char2idx, unk, max_len, byt5_tokenizer,
         except Exception as exc:
             print(f"Error: {exc}")
 
+# Add this function after format_prediction()
+def charlm_interactive_mode(model, max_len, char2idx, unk, temperature=1.0):
+    print("=" * 60)
+    print("CharLM Generation Mode")
+    print("Type 'quit' or 'exit' to terminate.")
+    print("=" * 60)
+    while True:
+        try:
+            prompt = input("\nEnter prompt: ").strip()
+            if not prompt:
+                continue
+            if prompt.lower() in {"quit", "exit"}:
+                print("Goodbye.")
+                break
+            generated = model.generate(prompt, char2idx, unk, max_len=max_len, temperature=temperature)
+            print(f"Generated: {generated}")
+        except KeyboardInterrupt:
+            print("\nExiting.")
+            break
+        except Exception as exc:
+            print(f"Error: {exc}")
+
+def charlm_file_mode(model, input_path, output_path, max_len, temperature=1.0):
+    prompts = [
+        line.strip()
+        for line in Path(input_path).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    results = []
+    for prompt in prompts:
+        try:
+            generated = model.generate(prompt, max_len=max_len, temperature=temperature)
+            results.append({"prompt": prompt, "generated": generated})
+        except Exception as e:
+            results.append({"prompt": prompt, "generated": f"ERROR: {e}"})
+
+    if output_path:
+        import csv
+        with open(output_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=["prompt", "generated"])
+            writer.writeheader()
+            writer.writerows(results)
+        print(f"Results written to {output_path}")
+    else:
+        for r in results:
+            print(f"{r['prompt']} → {r['generated']}")
+
+def charlm_evaluation_mode(model, eval_loader, task_config, device):
+    avg_loss, perplexity, bpc = evaluate_charlm(model, eval_loader, task_config, device)
+    log.info(f"Loss: {avg_loss:.4f}")
+    log.info(f"Perplexity: {perplexity:.2f}")
+    log.info(f"BPC: {bpc:.4f}")
+
 def file_mode(
     model,
     task_config,
@@ -214,14 +267,18 @@ def evaluation_mode(model, task_config, eval_loader, thresholds):
         log.info(f"F1 per class={f1s}")
 
 def main():
-
-    parser = argparse.ArgumentParser(description="Predict word origins using trained models.")
-    parser.add_argument("model", help="Path to classifier model .pt file")
-    parser.add_argument("--charlm", help="Path to pretrained CharLM encoder if required", type=str)
+    parser = argparse.ArgumentParser(description="Predict/generate using trained models.")
+    parser.add_argument("model", help="Path to model .pt file")
+    parser.add_argument("--charlm", help="Path to CharLM encoder (if required)", type=str)
+    
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("-i", "--interactive", action="store_true", help="Interactive mode")
-    mode.add_argument("-f", "--file", help="File containing one word per line")
-    parser.add_argument("-o", "--output", help="Output CSV path for file mode")
+    mode.add_argument("-f", "--file", help="Input file (words or prompts)")
+    mode.add_argument("-e", "--eval", help="Evaluate on dataset (path to txt/csv)")
+    
+    parser.add_argument("-o", "--output", help="Output path")
+    parser.add_argument("--temperature", type=float, default=1.0, help="Generation temperature")
+    parser.add_argument("--max-gen-len", type=int, default=100, help="Max generation length")
     args = parser.parse_args()
 
     print(f"Loading checkpoint from {args.model}")
@@ -233,48 +290,55 @@ def main():
     thresholds = raw_ckpt.get("thresholds", None)
     unk = char2idx.get("<UNK>", max(char2idx.values()))
 
-    # Load CharLM encoder if the model requires it.
+    # Load CharLM encoder if needed
     charlm_encoder = None
     if model_config.use_charlm:
-        charlm_path = args.charlm
-        if not charlm_path:
-            raise ValueError(
-                "This model requires a CharLM encoder. Provide it via --charlm path/to/charlm.pt"
-            )
-        log.info(f"Loading CharLM encoder from {charlm_path}")
-        charlm_encoder, _ = load_charlm_encoder(charlm_path, device, freeze=True)
+        if not args.charlm:
+            raise ValueError("Model requires CharLM encoder. Use --charlm path/to/charlm.pt")
+        log.info(f"Loading CharLM encoder from {args.charlm}")
+        charlm_encoder, _ = load_charlm_encoder(args.charlm, device, freeze=True)
 
-    # Load model properly.
     model, checkpoint, byt5_tokenizer = load_model(args.model, charlm_encoder)
-
+    
     log.info(f"Model hash: {compute_model_hash(model)}")
     print(f"Task: {task_config.name} ({task_config.task_type})")
     print(f"Device: {device}")
 
-    # Interactive / File.
-    if args.interactive:
-        interactive_mode(
-            model,
-            task_config,
-            char2idx,
-            unk,
-            train_config.max_seq_len,
-            byt5_tokenizer,
-            thresholds,
+    # CharLM-specific modes
+    if task_config.task_type == "generative":
+        if args.eval:
+            # Evaluation mode
+            dataset = WordDataset(args.eval, task_config)
+            eval_loader = DataLoader(
+                dataset,
+                batch_size=train_config.batch_size,
+                shuffle=False,
+                collate_fn=lambda b: collate_lm(b, train_config.max_seq_len),
+            )
+            charlm_evaluation_mode(model, eval_loader, task_config, device)
+        elif args.interactive:
+            charlm_interactive_mode(model, args.max_gen_len, char2idx, args.temperature)
+        elif args.file:
+            output_path = Path(args.output) if args.output else None
+            charlm_file_mode(model, args.file, output_path, args.max_gen_len, args.temperature)
+        return
+
+    # Classification modes (existing logic)
+    if args.eval:
+        dataset = OriginDataset(args.eval, task_config, use_byt5=model_config.use_byt5)
+        eval_loader = DataLoader(
+            dataset,
+            batch_size=train_config.batch_size,
+            shuffle=False,
+            collate_fn=lambda b: collate(b, train_config.max_seq_len, byt5_tokenizer),
         )
+        evaluation_mode(model, task_config, eval_loader, thresholds)
+    elif args.interactive:
+        interactive_mode(model, task_config, char2idx, unk, train_config.max_seq_len, byt5_tokenizer, thresholds)
     elif args.file:
         output_path = Path(args.output) if args.output else None
-        file_mode(
-            model,
-            task_config,
-            char2idx,
-            unk,
-            train_config.max_seq_len,
-            args.file,
-            output_path,
-            byt5_tokenizer,
-            thresholds,
-        )
+        file_mode(model, task_config, char2idx, unk, train_config.max_seq_len, args.file, output_path, byt5_tokenizer, thresholds)
+
 
 if __name__ == "__main__":
     main()

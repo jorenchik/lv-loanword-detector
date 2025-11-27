@@ -1,4 +1,5 @@
 
+import readline
 import argparse
 from pathlib import Path
 
@@ -214,10 +215,10 @@ def main():
     )
     train_config = TrainConfig(
         batch_size=64,
-        learning_rate=3e-4,
+        learning_rate=1e-5,
         weight_decay=1e-3,
         num_epochs=1000,
-        patience=1, # 5
+        patience=5, # 5
         max_seq_len=25,
         beta=1, # 0.7
     )

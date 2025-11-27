@@ -110,7 +110,7 @@ class CharLanguageModel(nn.Module):
         else:
             raise ValueError(f"Unknown pool mode: {pool}")
 
-    def generate(self, start_seq, max_len=100, temperature=1.0):
+    def generate(self, start_seq, char2idx, unk, max_len=50, temperature=1.0):
         """
         Generate text starting from a given character sequence.
         """
@@ -315,7 +315,8 @@ def get_loss_fn(
         class_weights = compute_class_weights(task_config, data_loader, device)
         return nn.CrossEntropyLoss(ignore_index=-1, weight=class_weights)
     elif task_config.task_type == "generative":
-        return nn.CrossEntropyLoss()
+        from classifiers.dl.data_ import unk
+        return nn.CrossEntropyLoss(ignore_index=unk)
 
 
 def load_model(model_file, charlm_encoder):
