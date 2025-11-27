@@ -564,8 +564,9 @@ class TopNModels:
         return min(self.models, key=lambda x: x[0])[2]
 
 
-def evaluate_charlm(model, loader, criterion, device):
+def evaluate_charlm(model, loader, task_config, device):
 
+    criterion = get_loss_fn(task_config, loader, device)
     model.eval()
     total_loss = 0.0
     total_chars = 0

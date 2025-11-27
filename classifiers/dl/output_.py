@@ -194,11 +194,10 @@ def output_evaluation(model, train_config, task_config, loader, device, threshol
             metrics_file
         )
 
-    elif task_config.task_type == "charlm":
+    elif task_config.task_type == "generative":
 
-        log.info(f"Best epoch: {best_epoch}, dev_loss: {best_dev_loss:.4f}, dev_perplexity: {best_dev_perplexity:.2f}")
         test_loss, test_perplexity, test_bpc = evaluate_charlm(
-            model, test_loader, criterion, device
+            model, loader, task_config, device
         )
         log.info(
             f"Test set evaluation for CharLM: "
