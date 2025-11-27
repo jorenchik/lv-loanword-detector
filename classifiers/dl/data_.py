@@ -213,3 +213,16 @@ def compute_pos_weights(loader, device, task_type: str):
     neg = total_count - pos
     return neg / (pos + 1e-8)
 
+def compute_class_weights(task_config, loader, device):
+    """Compute per-class weights aligned with task_config.label_to_idx."""
+    num_classes = len(task_config.label_to_idx)
+    counts = torch.zeros(num_classes, dtype=torch.float32)
+    for _, y in loader:
+        mask = y >= 0
+        valid_y = y[mask]
+        for idx in valid_y:
+            counts[idx.item()] += 1
+    counts = torch.where(counts == 0, torch.ones_like(counts), counts)
+    weights = 1.0 / counts
+    weights = weights / weights.sum() * num_classes
+    return weights.to(device)

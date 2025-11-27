@@ -289,12 +289,11 @@ def main():
     log.info(f"Model parameters: {sum(p.numel() for p in model.parameters())}")
 
     # Loss.
-    pos_weight = compute_pos_weights(
+    criterion = get_loss_fn(
+        task_config, 
         train_loader,
         device,
-        task_config.task_type
     )
-    criterion = get_loss_fn(task_config, pos_weight)
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=train_config.learning_rate,

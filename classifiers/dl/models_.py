@@ -1,8 +1,14 @@
 
+import math
+from tqdm import tqdm
 import heapq
 from pathlib import Path
 import torch
 import torch.nn as nn
+from classifiers.dl.data_ import (
+    compute_class_weights,
+    compute_pos_weights,
+)
 from classifiers.dl.model_config import (
     ModelConfig
 )
@@ -276,12 +282,22 @@ def load_charlm_encoder(model_file, device, freeze=True):
     
     return encoder, checkpoint["model_config"].hidden_dim
 
-def get_loss_fn(task_config: TaskConfig, pos_weight=None):
+def get_loss_fn(
+    task_config: TaskConfig,
+    data_loader,
+    device,
+):
 
     if task_config.task_type in ["multilabel", "binary"]:
+        pos_weight = compute_pos_weights(
+            data_loader,
+            device,
+            task_config.task_type
+        )
         return nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     elif task_config.task_type == "multiclass":
-        return nn.CrossEntropyLoss(ignore_index=-1)
+        class_weights = compute_class_weights(task_config, data_loader, device)
+        return nn.CrossEntropyLoss(ignore_index=-1, weight=class_weights)
     elif task_config.task_type == "generative":
         return nn.CrossEntropyLoss()
 

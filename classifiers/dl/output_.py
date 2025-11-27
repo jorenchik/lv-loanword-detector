@@ -145,9 +145,9 @@ def save_test_metrics(
             rows.append({
                 'class': label,
                 'accuracy': '-',
-                'precision': f"{metrics['precision'][i]:.4f}",
-                'recall': f"{metrics['recall'][i]:.4f}",
-                'f1': f"{metrics['f1'][i]:.4f}",
+                # 'precision': f"{metrics['precision'][i]:.4f}",
+                # 'recall': f"{metrics['recall'][i]:.4f}",
+                # 'f1': f"{metrics['f1'][i]:.4f}",
             })
         
         df = pd.DataFrame(rows)
