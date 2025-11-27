@@ -316,6 +316,7 @@ def main():
     patience_left = train_config.patience
 
     # Training cycle.
+    use_scheduler = True
     current_lr = optimizer.param_groups[0]['lr']
     for epoch in range(train_config.num_epochs):
 
@@ -330,10 +331,14 @@ def main():
             f"Epoch {epoch}: "
             f"train_loss={train_loss:.4f}"
             f", dev_loss={dev_loss:.4f}"
+            f", lr={current_lr:.8f}"
         )
 
         epoch_logger.log_epoch(epoch, train_loss, dev_loss, current_lr)
-        scheduler.step(dev_loss)
+
+        if use_scheduler:
+            scheduler.step(dev_loss)
+        current_lr = optimizer.param_groups[0]['lr']
 
         if dev_loss < best_dev_loss:
 
