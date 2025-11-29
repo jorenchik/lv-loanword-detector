@@ -161,6 +161,35 @@ def count_origin_distribution(df):
 
     return dict_
 
+def get_test_filename(output_path):
+    """Generate test filename by inserting '_test' before extension."""
+    path = Path(output_path)
+    return str(path.parent / f"{path.stem}_test{path.suffix}")
+
+def split_train_test(df, test_size, random_state=42):
+    """
+    Split dataframe into train and test sets.
+    
+    Args:
+        df: Input dataframe
+        test_size: Fraction of data for test set (0.0 to 1.0)
+        random_state: Random seed for reproducibility
+        
+    Returns:
+        train_df, test_df
+    """
+    if test_size <= 0 or test_size >= 1:
+        raise ValueError("test_size must be between 0 and 1")
+    
+    df_shuffled = df.sample(frac=1, random_state=random_state).reset_index(drop=True)
+    
+    test_count = int(len(df) * test_size)
+    
+    test_df = df_shuffled.iloc[:test_count].copy()
+    train_df = df_shuffled.iloc[test_count:].copy()
+    
+    return train_df, test_df
+
 def get_inflections_bulk(words, jar_path, batch_size=100):
     """
     Get inflections for multiple words in batches using stdin.
@@ -402,6 +431,10 @@ def main():
     parser.add_argument("input",  help="Input CSV file")
     parser.add_argument("output", help="Output CSV file")
     parser.add_argument("--only-loanwords", action="store_true")
+    parser.add_argument("--save-test", type=float, metavar="PCT",
+                       help="Save test set with PCT%% of data (e.g., 0.2 for 20%%)")
+    parser.add_argument("--random-seed", type=int, default=42,
+                       help="Random seed for train/test split")
     
     # Augmentation
     parser.add_argument("--augment", action="store_true")
@@ -451,6 +484,32 @@ def main():
         df = df[df["is_loanword"] == True]
         stats["filtered_to_loanwords"] = True
         log(f"After filtering: {len(df)} rows")
+
+    # Split train/test before augmentation
+    if args.save_test:
+        if args.save_test <= 0 or args.save_test >= 1:
+            log("--save-test must be between 0 and 1", "ERROR")
+            return
+        
+        log("=" * 60)
+        log(f"SPLITTING DATA: {args.save_test*100:.1f}% for test set")
+        log("=" * 60)
+        
+        train_df, test_df = split_train_test(
+            df, args.save_test, random_state=args.random_seed
+        )
+        
+        test_path = get_test_filename(args.output)
+        log(f"Saving test set ({len(test_df)} rows) to {test_path}")
+        test_df.to_csv(test_path, index=False)
+        
+        stats["test_file"] = test_path
+        stats["test_rows"] = len(test_df)
+        stats["train_rows_before_aug"] = len(train_df)
+        
+        # Continue with train set only
+        df = train_df
+        log(f"Continuing with train set ({len(df)} rows)")
 
     # Augmentation
     if args.augment:
