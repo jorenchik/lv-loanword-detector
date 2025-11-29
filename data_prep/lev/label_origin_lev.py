@@ -1,153 +1,288 @@
-
-import csv
 import argparse
+import pandas as pd
+import json
 from collections import Counter
-import re
 
-origin_counter = Counter()
-# loanword_counter = Counter()
+# level 0 -> level 1.
+# Keys of LEV_CUES and family_to_codes are the L0 origins found in the input 'origin' column.
+# Values are the consolidated L1 categories.
 
-ABBT_EXP_RE = re.compile(r"[^a-zāčēģīķļņšūž.]", re.IGNORECASE)
+mapping = {
+    # --- GERMANIC ---
+    "north-germanic": "germanic",
+    "west-germanic":  "germanic",
+    
+    # --- ROMANCE ---
+    "romance":        "romance",
+    
+    # --- GREEK ---
+    "greek":          "greek",
+    
+    # --- SLAVIC ---
+    "slavic":         "slavic",
 
-# CUE index.
-LEV_CUES = {
-    # Borrowings.
-    "north-germanic": ["d.", "norv.", "zv.", "island.", "sisl.", "ssk.", "szv.", "sv."], # AKA. Scandinavian; maybe also ssak., sensak?
-    "west-germanic":  ["v.", "germ.", "ang.", "vv.", "vlv.", "bv.", "lv.", "sav.", "vav.", "sfrī.", "h.", "hol."],
-    "romance":    	  ["lat.", "jlat.", "it.", "fr.", "rum.", "sfr.", "f.",  "vlat."],
-    "greek":	      ["gr." ],
+    # --- BALTIC ---
+    "baltic":         "baltic",
+    
+    # --- INDO-IRANIAN ---
+    "indo-iranian":   "indo-iranian",
+    
+    # --- IDE-OTHER (for general IE and less common IE branches/proto-forms) ---
+    "ide":            "ide",
+    "armenian":       "ide-other",        # From LEV_CUES / family_to_codes
+    "albanian":       "ide-other",        # From LEV_CUES / family_to_codes
+    "illyrian":       "ide-other",        # From LEV_CUES
+    "thracian":       "ide-other",        # From LEV_CUES
+    "tocharian":      "ide-other",        # From LEV_CUES
+    "celtic":         "ide-other",        # From family_to_codes
 
-    "slavic":	      ["kr.", "k.", "skr.", "sl.", "ukr.", "p.", "bulg.", "č", "ssl"],
+    # --- NON-IDE (for all non-Indo-European families) ---
+    "uralic":         "non-ide",          # From LEV_CUES / family_to_codes
+    "etruscan":       "non-ide",          # From LEV_CUES
+    "semitic":        "non-ide",          # From LEV_CUES / family_to_codes
+    "turkic":         "non-ide",          # From family_to_codes
+    "caucasian":      "non-ide",          # From family_to_codes
+    "altaic":         "non-ide",          # From family_to_codes
+    "austronesian":   "non-ide",          # From family_to_codes
+    "sino-tibetan":   "non-ide",          # From family_to_codes
+    "aztec":          "non-ide",          # From family_to_codes
+    "bantu":          "non-ide",          # From family_to_codes
+    "austroasiatic":  "non-ide",          # From family_to_codes
+    "austric":        "non-ide",          # From family_to_codes
 
-    # Native classes.
-    "baltic":	      ["apv.", "la.", "b.", "ab.", "lš.", "pr.", "narev.", "kurs.", "kursen.", "rb."], # atv. (add retrieval for atv.?)
-    "ide":            ["ide.", "pirmside.", "indoeiropiešu", "lde."],
-
-    # Non‑IE
-    "uralic": ["somu", "s-u.", "s.", "ung.", "ig.", "līb.", "ural."],
-    # "uralic": ["somu", "s-u.", "s.", "ung.", "līb."],
-    "etruscan": ["etr."],
-    "semitic": ["he.", "sebr."],
-
-    # Indo‑European subfamilies actually present
-    "indo-iranian": ["ir.", "jr.", "spers.", "oset.", "tadž.", "rer.", "rir.", "si.", "afg.", "pers."],
-    "armenian": ["arm."],
-    "albanian": ["alb."],
-    "illyrian": ["illīr."],
-    "thracian": ["trāķ."],
-    "tocharian": ["toh."],
+    # --- SPECIAL / UNKNOWN ---
+    "constructed":    "unknown",          # From family_to_codes
+    "creole":         "unknown",          # From family_to_codes
+    "unknown":        "unknown",          # Explicit 'unknown' tag (already in your mapping)
 }
 
-SUB_CUES = ["jaunvārds"]
+# level 1 -> level 2 (merge greek + romance)
+mapping_l2 = {
+    "greek":      "greco-romance",
+    "romance":    "greco-romance",
+    "germanic":   "germanic",
+    "slavic":     "slavic",
+    "non-ide":    "non-ide",
+    "baltic":     "baltic",
+}
 
-# Inverse index.
-inv_lev_cues = {}
-for group, cues in LEV_CUES.items():
-    for cue in cues:
-        if cue in inv_lev_cues:
-            raise Exception(
-                "Duplicate cue:", cue, 
-                " found in ", inv_lev_cues[cue],
-                " want to add to ", group
-            )
-        else:
-            inv_lev_cues[cue] = group
+furthest_precedence = [
+    "non-ide",
+    "greek",
+    "romance",
+    "germanic",
+    "slavic",
+    "baltic",
+    "ide"   
+]
 
-# CLI args.
-parser = argparse.ArgumentParser(description="Label origins.")
-parser.add_argument('input', help='Path to input CSV file.')
-parser.add_argument('output', help='Path to output CSV file.')
-parser.add_argument('--debug', action="store_true")
-args = parser.parse_args()
+direct_precedence = [
+    x for x in reversed(furthest_precedence) if x not in {"baltic", "ide", "non-ide"} 
+]
 
-def label(cues, inv_lev_cues):
+# direct_precedence = [
+#     "non-ide",
+#     "greco-romance",
+#     "germanic",
+#     "slavic"
+# ]
 
-    groups = []
-    for cue in cues:
-        g = inv_lev_cues.get(cue)
-        if g:
-            groups.append(g)
-    if not groups:
-        return {"unknown"}
+def remap_origin_value(value, mapping):
+    parts = str(value).split("|")
+    out = []
+    for p in parts:
+        p = p.strip()
+        if p in mapping:
+            out.append(mapping.get(p, p))
+    return "|".join(set(out))
 
-    group_cnt = Counter(groups)
-    group_set = set(groups)
+def is_loanword(value):
+    origins = set(str(value).split("|"))
 
-    # is_loanword = not ({"baltic", "indoeuropean"} <= group_set)
+    if "unknown" in origins:
+        return None
 
-    return group_set
+    if "ide" in origins: # If 'ide' is explicitly mentioned, it's considered native/inherited, not a loan.
+        return False
+    
+    if origins == {"baltic"}: # Strictly Baltic means native, not a loan.
+        return False
+    
+    # Filter out 'baltic' and 'ide' to count non-Baltic/non-IDE sources
+    non_baltic_non_ide_sources = {o for o in origins if o not in {"baltic", "ide", "unknown"}}
+    
+    if not non_baltic_non_ide_sources:
+        # If no non-Baltic/non-IDE sources are left, it's not a loan (e.g., just {'baltic'} or {'ide'})
+        return False
+    
+    # Apply your specific logic for 'baltic' presence
+    if "baltic" in origins:
+        # Case: 'baltic' + one non-Baltic/non-IDE group
+        if len(non_baltic_non_ide_sources) == 1:
+            return True # This is a loan based on your rule
+        # Case: 'baltic' + multiple non-Baltic/non-IDE groups
+        elif len(non_baltic_non_ide_sources) > 1:
+            return False # This is considered native/IDE based on your rule
+    
+    # If 'baltic' is NOT in origins, and there are non-Baltic sources, it's a clear loan.
+    # Example: origins = {'slavic'} or {'slavic', 'germanic'} (without 'baltic')
+    return True
 
-    # TODO: remove.
-    # if "indoeuropean" in group_set:
-    #     return {"indoeuropean"}
-    #
-    # if group_set <= {"baltic"}:
-    #     return {"baltic"}
-    #
-    # for x in ["romance", "scandinavian", "greek", "germanic", "slavic"]:
-    #     if group_set <= {"baltic", x}:
-    #         return {x}
-    #
-    # if group_set <= {"baltic", "romance", "scandinavian", "greek", "germanic", "slavic"}:
-    #     return (group_set - {"baltic"})
+def is_strictly_baltic(value):
+    origins = set(str(value).split("|"))
 
-    # return {"unknown"}
+    if origins == {"baltic"}:
+        return True 
 
+    return False
 
-with (
-    open(args.input, newline='') as in_,
-    open(args.output, "w", newline='') as out_,
-):
+def categorize_as_native_or_loan(is_loanword_val, origin_val):
+    """Return 'native' if not a loanword, otherwise return the origin."""
+    if is_loanword_val is False:
+        return "native"
+    elif is_loanword_val is None:
+        return "unknown"
+    else:
+        return origin_val
 
-    # Setup reader.
-    spamreader = csv.reader(in_, delimiter=',', quotechar='"')
-    cols = spamreader.__next__()
+def pick_origin_by_precedence(value, precedence):
+    """Select the single origin based on defined precedence order."""
+    origins = [p.strip() for p in str(value).split("|") if p.strip()]
+    for p in precedence:
+        if p in origins:
+            return p
+    return None
 
-    # Setup writer.
-    writer = csv.writer(out_)
-    writer.writerow(["word", "origin"])
+def adjust_non_ide(origins):
+    non_ide = "non-ide"
+    s = set(origins.split("|"))
 
-    # RANGE = [400,500]
-    RANGE = None
+    if non_ide not in s:
+        return origins
 
-    for i, row in enumerate(spamreader):
+    if s <= {non_ide, "baltic"}:
+        return non_ide
 
-        if RANGE:
-            if i < RANGE[0]:
-                continue
-            elif i >= RANGE[1]:
-                break
+    s.discard(non_ide)
+    return "|".join(sorted(s))
 
-        headword = row[cols.index("headword")]
-        text = row[cols.index("text")]
+def count_origin_distribution(df):
+    dict_ = {}
+    
+    for row in df:
+        origins = str(row).split("|")
+        for origin in origins:
+            if origin in dict_:
+                dict_[origin] += 1
+            else:
+                dict_[origin] = 1
 
-        cues = []
-        for w in text.split():
-            candidate = w.lower()
-            candidate = ABBT_EXP_RE.sub("", candidate)
-            if candidate in inv_lev_cues or candidate in SUB_CUES:
-                cues.append(candidate)
+    return dict_
 
-        origin = label(cues, inv_lev_cues)
-        origin_counter.update(origin)
-        # loanword_counter.update({is_loanword})
+def main():
+    parser = argparse.ArgumentParser(
+        "Nomappo izcelsmes marķējumus uz noteikto līmeni"
+    )
+    parser.add_argument("input",  help="Input CSV file")
+    parser.add_argument("output", help="Output CSV file")
+    parser.add_argument("--only-loanwords", action="store_true")
+    args = parser.parse_args()
 
-        # convert origin set to a stable string representation
-        origin_str = "|".join(sorted(origin))
-        writer.writerow([headword, origin_str]) 
+    df = pd.read_csv(args.input)
+    stats = Counter()
+    stats["rows_total"] = len(df)
 
-        # DEBUG.
-        show = origin == {"unknown"}
-        if args.debug and show:
-            print(
-                headword,
-                "cues: " + ', '.join(cues),
-                "label: " + str(origin),
-                text,
-                "__________________",
-                sep="\n"
-            )
+    if "origin" not in df.columns:
+        raise ValueError("CSV must contain an 'origin' column")
 
-print("[I] Summary...")
-print(origin_counter)
-# print(loanword_counter)
+    df["origin_l1"] = df["origin"].apply(
+        lambda x: remap_origin_value(x, mapping)
+    )
+    df["origin_l1"] = df["origin_l1"].apply(adjust_non_ide)
+
+    # Apply l2 mapping for direct_origin
+    df["origin_l2"] = df["origin_l1"].apply(
+        lambda x: remap_origin_value(x, mapping_l2)
+    )
+
+    df["is_loanword"] = df["origin_l1"].apply(lambda x: is_loanword(x))
+    df["is_strictly_baltic"] = df["origin_l1"].apply(
+        lambda x: is_strictly_baltic(x)
+    )
+
+    df["furthest_origin"] = df["origin_l1"].apply(
+        lambda x: pick_origin_by_precedence(x, furthest_precedence)
+    )
+
+    df["direct_origin"] = df["origin_l2"].apply(
+        lambda x: pick_origin_by_precedence(x, direct_precedence)
+    )
+
+    # Add native/loan categorization
+    df["furthest_category"] = df.apply(
+        lambda row: categorize_as_native_or_loan(
+            row["is_loanword"], row["furthest_origin"]
+        ),
+        axis=1
+    )
+    
+    df["direct_category"] = df.apply(
+        lambda row: categorize_as_native_or_loan(
+            row["is_loanword"], row["direct_origin"]
+        ),
+        axis=1
+    )
+
+    if args.only_loanwords:
+        df = df[df["is_loanword"] == True]
+
+    df.to_csv(args.output, index=False)
+
+    # Aggregate stats after processing
+    stats["rows_final"] = len(df)
+    
+    stats["has_loanword_label"] = int(df["is_loanword"].notna().sum())
+    stats["has_furthest_label"] = int(df["furthest_origin"].notna().sum())
+    stats["has_baltic_label"] = int(df["is_strictly_baltic"].notna().sum())
+    
+    # Fixed loanword distribution
+    loanword_true = int((df["is_loanword"] == True).sum())
+    loanword_false = int((df["is_loanword"] == False).sum())
+    loanword_none = int(df["is_loanword"].isna().sum())
+    stats["loanwords"] = {
+        "true": loanword_true,
+        "false": loanword_false,
+        "unknown": loanword_none
+    }
+
+    baltic_count = int(df["is_strictly_baltic"].sum()) 
+    stats["strictly_baltic_count"] = {
+        "true": baltic_count,
+        "false": stats["has_baltic_label"] - baltic_count
+    }
+
+    # Origin label distribution
+    stats["origins_distribution"] = count_origin_distribution(
+        df["origin_l1"]
+    )
+    stats["furthest_origins_distribution"] = dict(
+        Counter(df["furthest_origin"].dropna())
+    )
+    stats["direct_origins_distribution"] = dict(
+        Counter(df["direct_origin"].dropna())
+    )
+    stats["furthest_category_distribution"] = dict(
+        Counter(df["furthest_category"].dropna())
+    )
+    stats["direct_category_distribution"] = dict(
+        Counter(df["direct_category"].dropna())
+    )
+
+    # Print summary
+    print("=== Processing summary ===")
+    for k, v in stats.items():
+        print(f"{k}: {v}")
+    print(f"\nSaved processed CSV to {args.output}")
+
+if __name__ == "__main__":
+    main()
