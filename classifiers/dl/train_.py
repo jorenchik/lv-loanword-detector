@@ -1,4 +1,3 @@
-
 import readline
 import argparse
 from pathlib import Path
@@ -120,11 +119,20 @@ def main():
 
     # CLIargs.
     parser = argparse.ArgumentParser()
-    parser.add_argument("input", help="Path to CSV dataset")
+    parser.add_argument("input", nargs="?", help="Path to CSV dataset (auto-split mode)")
     parser.add_argument(
         "--name",
         default="model",
         help="Base name for output directory"
+    )
+    parser.add_argument(
+        "--train", type=str, help="Path to train CSV (manual split mode)"
+    )
+    parser.add_argument(
+        "--dev", type=str, help="Path to dev CSV (manual split mode)"
+    )
+    parser.add_argument(
+        "--test", type=str, help="Path to test CSV (manual split mode)"
     )
     parser.add_argument(
         "--task",
@@ -165,6 +173,17 @@ def main():
         help="Base directory to store experiment outputs (default: ./results)"
     )
     args = parser.parse_args()
+
+    # Validate input mode
+    manual_split = bool(args.train or args.dev or args.test)
+    auto_split = bool(args.input)
+    
+    if manual_split and auto_split:
+        log.error("Cannot use both manual split (--train/--dev/--test) and auto split (input)")
+        return
+    if not manual_split and not auto_split:
+        log.error("Must provide either input file or --train/--dev/--test files")
+        return
 
     # Setup output directory inside specified base output path.
     model_variant = f"{args.task}_{args.model}"
@@ -226,44 +245,76 @@ def main():
     log.info(f"Task: {task_config.name} ({task_config.task_type})")
     log.info(f"Model config: {model_config.model_type}")
 
-    # Load the data..
-    full_df = pd.read_csv(args.input)
-    if args.task == "charlm":
-        dataset = WordDataset(args.input, task_config)
+    # Load datasets based on mode
+    if manual_split:
+        log.info("Using manual train/dev/test split")
+        
+        if not args.train:
+            log.error("--train is required in manual split mode")
+            return
+        
+        # Load datasets
+        if args.task == "charlm":
+            train_ds = WordDataset(args.train, task_config)
+            dev_ds = WordDataset(args.dev, task_config) if args.dev else None
+            test_ds = WordDataset(args.test, task_config) if args.test else None
+        else:
+            train_ds = OriginDataset(args.train, task_config, use_byt5=args.use_byt5)
+            dev_ds = OriginDataset(args.dev, task_config, use_byt5=args.use_byt5) if args.dev else None
+            test_ds = OriginDataset(args.test, task_config, use_byt5=args.use_byt5) if args.test else None
+        
+        log.info(f"Train: {len(train_ds)}")
+        if dev_ds:
+            log.info(f"Dev: {len(dev_ds)}")
+        if test_ds:
+            log.info(f"Test: {len(test_ds)}")
+        
+        # No need to save datasets since they're already split
     else:
-        dataset = OriginDataset(args.input, task_config, use_byt5=args.use_byt5)
-    if args.downsample:
-        dataset = Subset(dataset, range(min(args.downsample, len(dataset))))
-        full_df = full_df.iloc[:args.downsample]
+        log.info("Using auto-split mode")
+        
+        # Load the data
+        full_df = pd.read_csv(args.input)
+        if args.task == "charlm":
+            dataset = WordDataset(args.input, task_config)
+        else:
+            dataset = OriginDataset(args.input, task_config, use_byt5=args.use_byt5)
+        
+        if args.downsample:
+            dataset = Subset(dataset, range(min(args.downsample, len(dataset))))
+            full_df = full_df.iloc[:args.downsample]
 
-    # Split the dataset
-    n = len(dataset)
-    g = torch.Generator().manual_seed(42)
-    n_train = int(n * 0.8)
-    n_dev = int(n * 0.1)
-    n_test = n - n_train - n_dev
-    train_ds, dev_ds, test_ds = random_split(
-        dataset,
-        [n_train, n_dev, n_test],
-        generator=g
-    )
-    train_indices = train_ds.indices
-    dev_indices = dev_ds.indices
-    test_indices = test_ds.indices
-
-    # Save the datasets for reference.
-    dataset_dir = output_dir / "datasets"
-    if args.task != "charlm":
-        full_df.iloc[train_indices].to_csv(
-            dataset_dir / "train.csv", index=False
+        # Split the dataset
+        n = len(dataset)
+        g = torch.Generator().manual_seed(42)
+        n_train = int(n * 0.8)
+        n_dev = int(n * 0.1)
+        n_test = n - n_train - n_dev
+        train_ds, dev_ds, test_ds = random_split(
+            dataset,
+            [n_train, n_dev, n_test],
+            generator=g
         )
-        full_df.iloc[dev_indices].to_csv(
-            dataset_dir / "dev.csv", index=False
-        )
-        full_df.iloc[test_indices].to_csv(
-            dataset_dir / "test.csv", index=False
-        )
-    log.info(f"Saved data splits to {dataset_dir}")
+        
+        log.info(f"Train: {n_train}, Dev: {n_dev}, Test: {n_test}")
+        
+        # Save the datasets for reference
+        dataset_dir = output_dir / "datasets"
+        if args.task != "charlm":
+            train_indices = train_ds.indices
+            dev_indices = dev_ds.indices
+            test_indices = test_ds.indices
+            
+            full_df.iloc[train_indices].to_csv(
+                dataset_dir / "train.csv", index=False
+            )
+            full_df.iloc[dev_indices].to_csv(
+                dataset_dir / "dev.csv", index=False
+            )
+            full_df.iloc[test_indices].to_csv(
+                dataset_dir / "test.csv", index=False
+            )
+        log.info(f"Saved data splits to {dataset_dir}")
 
     collate_fn = collate_lm if args.task == "charlm" else collate
     train_loader = DataLoader(
@@ -272,18 +323,24 @@ def main():
         shuffle=True,
         collate_fn=lambda b: collate_fn(b, train_config.max_seq_len, byt5_tokenizer),
     )
-    dev_loader = DataLoader(
-        dev_ds,
-        batch_size=train_config.batch_size,
-        shuffle=False,
-        collate_fn=lambda b: collate_fn(b, train_config.max_seq_len, byt5_tokenizer),
-    )
-    test_loader = DataLoader(
-        test_ds,
-        batch_size=train_config.batch_size,
-        shuffle=False,
-        collate_fn=lambda b: collate_fn(b, train_config.max_seq_len, byt5_tokenizer),
-    )
+    
+    dev_loader = None
+    if dev_ds:
+        dev_loader = DataLoader(
+            dev_ds,
+            batch_size=train_config.batch_size,
+            shuffle=False,
+            collate_fn=lambda b: collate_fn(b, train_config.max_seq_len, byt5_tokenizer),
+        )
+    
+    test_loader = None
+    if test_ds:
+        test_loader = DataLoader(
+            test_ds,
+            batch_size=train_config.batch_size,
+            shuffle=False,
+            collate_fn=lambda b: collate_fn(b, train_config.max_seq_len, byt5_tokenizer),
+        )
 
     # Model.
     model = create_model(model_config, task_config, charlm_encoder).to(device)
@@ -320,6 +377,10 @@ def main():
     use_scheduler = True
     current_lr = optimizer.param_groups[0]['lr']
     for epoch in range(train_config.num_epochs):
+
+        if not dev_loader:
+            log.error("Dev set required for training")
+            return
 
         run_fn = run_epoch_lm if args.task == "charlm" else run_epoch
         train_loss = run_fn(
@@ -383,6 +444,10 @@ def main():
     thresholds = checkpoint["thresholds"]
 
     # Evaluate on test.
+    if not test_loader:
+        log.warning("No test set provided, skipping evaluation")
+        return
+    
     log.info(f"Best epoch: {best_epoch}, dev_loss: {best_dev_loss:.4f}")
     output_evaluation(
         model,
