@@ -166,29 +166,47 @@ def get_test_filename(output_path):
     path = Path(output_path)
     return str(path.parent / f"{path.stem}_test{path.suffix}")
 
-def split_train_test(df, test_size, random_state=42):
+def split_train_dev_test(df, test_size=None, dev_size=None, random_state=42):
     """
-    Split dataframe into train and test sets.
+    Split dataframe into train, dev, and test sets.
     
     Args:
         df: Input dataframe
-        test_size: Fraction of data for test set (0.0 to 1.0)
+        test_size: Fraction for test set (0.0 to 1.0), None to skip
+        dev_size: Fraction for dev set (0.0 to 1.0), None to skip
         random_state: Random seed for reproducibility
         
     Returns:
-        train_df, test_df
+        train_df, dev_df (or None), test_df (or None)
     """
-    if test_size <= 0 or test_size >= 1:
-        raise ValueError("test_size must be between 0 and 1")
-    
     df_shuffled = df.sample(frac=1, random_state=random_state).reset_index(drop=True)
     
-    test_count = int(len(df) * test_size)
+    remaining_df = df_shuffled
+    test_df = None
+    dev_df = None
     
-    test_df = df_shuffled.iloc[:test_count].copy()
-    train_df = df_shuffled.iloc[test_count:].copy()
+    # Split test first if requested
+    if test_size and test_size > 0:
+        if test_size >= 1:
+            raise ValueError("test_size must be between 0 and 1")
+        
+        test_count = int(len(df_shuffled) * test_size)
+        test_df = remaining_df.iloc[:test_count].copy()
+        remaining_df = remaining_df.iloc[test_count:].copy()
     
-    return train_df, test_df
+    # Split dev from remaining if requested
+    if dev_size and dev_size > 0:
+        if dev_size >= 1:
+            raise ValueError("dev_size must be between 0 and 1")
+        
+        dev_count = int(len(df_shuffled) * dev_size)
+        dev_df = remaining_df.iloc[:dev_count].copy()
+        remaining_df = remaining_df.iloc[dev_count:].copy()
+    
+    train_df = remaining_df
+    
+    return train_df, dev_df, test_df
+
 
 def get_inflections_bulk(words, jar_path, batch_size=100):
     """
@@ -433,8 +451,10 @@ def main():
     parser.add_argument("--only-loanwords", action="store_true")
     parser.add_argument("--save-test", type=float, metavar="PCT",
                        help="Save test set with PCT%% of data (e.g., 0.2 for 20%%)")
+    parser.add_argument("--save-dev", type=float, metavar="PCT",
+                       help="Save dev set with PCT%% of data (e.g., 0.1 for 10%%)")
     parser.add_argument("--random-seed", type=int, default=42,
-                       help="Random seed for train/test split")
+                       help="Random seed for train/dev/test split")
     
     # Augmentation
     parser.add_argument("--augment", action="store_true")
@@ -485,26 +505,44 @@ def main():
         stats["filtered_to_loanwords"] = True
         log(f"After filtering: {len(df)} rows")
 
-    # Split train/test before augmentation
-    if args.save_test:
-        if args.save_test <= 0 or args.save_test >= 1:
-            log("--save-test must be between 0 and 1", "ERROR")
+    # Split train/dev/test before augmentation
+    if args.save_test or args.save_dev:
+        log("=" * 60)
+        log("SPLITTING DATA")
+        if args.save_test:
+            log(f"Test set: {args.save_test*100:.1f}%")
+        if args.save_dev:
+            log(f"Dev set: {args.save_dev*100:.1f}%")
+        log("=" * 60)
+        
+        try:
+            train_df, dev_df, test_df = split_train_dev_test(
+                df, 
+                test_size=args.save_test,
+                dev_size=args.save_dev,
+                random_state=args.random_seed
+            )
+        except ValueError as e:
+            log(str(e), "ERROR")
             return
         
-        log("=" * 60)
-        log(f"SPLITTING DATA: {args.save_test*100:.1f}% for test set")
-        log("=" * 60)
+        # Save test set
+        if test_df is not None:
+            test_path = get_test_filename(args.output)
+            log(f"Saving test set ({len(test_df)} rows) to {test_path}")
+            test_df.to_csv(test_path, index=False)
+            stats["test_file"] = test_path
+            stats["test_rows"] = len(test_df)
         
-        train_df, test_df = split_train_test(
-            df, args.save_test, random_state=args.random_seed
-        )
+        # Save dev set
+        if dev_df is not None:
+            dev_path = str(Path(args.output).parent / 
+                          f"{Path(args.output).stem}_dev{Path(args.output).suffix}")
+            log(f"Saving dev set ({len(dev_df)} rows) to {dev_path}")
+            dev_df.to_csv(dev_path, index=False)
+            stats["dev_file"] = dev_path
+            stats["dev_rows"] = len(dev_df)
         
-        test_path = get_test_filename(args.output)
-        log(f"Saving test set ({len(test_df)} rows) to {test_path}")
-        test_df.to_csv(test_path, index=False)
-        
-        stats["test_file"] = test_path
-        stats["test_rows"] = len(test_df)
         stats["train_rows_before_aug"] = len(train_df)
         
         # Continue with train set only
