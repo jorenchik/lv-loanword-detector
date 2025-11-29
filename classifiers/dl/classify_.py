@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
 import pandas as pd
 
 from classifiers.dl.models_ import (
@@ -20,6 +21,10 @@ from classifiers.dl.models_ import (
 from classifiers.dl.task_config import TaskConfig
 from classifiers.dl.torch_config import device
 from classifiers.dl.logging_ import log
+from classifiers.dl.data_ import (
+    OriginDataset,
+    collate
+)
 
 def tokenize(word: str, char2idx: dict[str, int], unk: int) -> torch.Tensor:
     indices = [char2idx.get(ch, unk) for ch in word]
@@ -278,7 +283,7 @@ def main():
     
     parser.add_argument("-o", "--output", help="Output path")
     parser.add_argument("--temperature", type=float, default=1.0, help="Generation temperature")
-    parser.add_argument("--max-gen-len", type=int, default=100, help="Max generation length")
+    parser.add_argument("--max-gen-len", type=int, default=35, help="Max generation length")
     args = parser.parse_args()
 
     print(f"Loading checkpoint from {args.model}")
