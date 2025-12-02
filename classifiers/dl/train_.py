@@ -359,7 +359,8 @@ def main():
 
     # Model.
     model = create_model(model_config, task_config, charlm_encoder).to(device)
-    log.info(f"Model parameters: {sum(p.numel() for p in model.parameters())}")
+    log.info(f"Model parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
+
 
     # Loss.
     criterion = get_loss_fn(
