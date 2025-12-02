@@ -361,7 +361,7 @@ def main():
         optimizer,
         mode="min",
         factor=0.5,
-        patience=2
+        patience=train_config.patience,
     )
 
     # Initialize trackers
