@@ -286,15 +286,85 @@ def get_inflections_bulk(words, jar_path, batch_size=100):
     
     return result_map
 
-def augment_dataset(df, jar_path, strategy="upsample", target_count=None, 
-                   max_inflections_per_word=5, batch_size=100):
+def augment_by_duplication(df, strategy="upsample", target_count=None):
+    """
+    Augment dataset by duplicating existing samples.
+    
+    Args:
+        df: Input dataframe
+        strategy: "upsample" or "balance"
+        target_count: Target number of samples per origin
+        
+    Returns:
+        Augmented dataframe
+    """
+    if "direct_origin" not in df.columns:
+        raise ValueError("DataFrame must have 'direct_origin' column")
+    
+    log("Starting duplication-based augmentation")
+    
+    # Get distribution
+    origin_counts = Counter(df[df["direct_origin"].notna()]["direct_origin"])
+    
+    if not origin_counts:
+        log("No origins to augment", "WARNING")
+        return df
+    
+    # Determine target
+    if target_count is None:
+        if strategy == "upsample":
+            target_count = max(origin_counts.values())
+        else:
+            target_count = sum(origin_counts.values()) // len(origin_counts)
+    
+    log(f"Strategy: {strategy}, Target: {target_count} samples per origin")
+    log(f"Current distribution: {dict(origin_counts)}")
+    
+    augmented_rows = []
+    
+    for origin, current_count in origin_counts.items():
+        needed = target_count - current_count
+        
+        if needed <= 0:
+            log(f"{origin}: {current_count} samples (no augmentation needed)")
+            continue
+        
+        log(f"{origin}: {current_count} samples, duplicating {needed} samples")
+        
+        origin_df = df[df["direct_origin"] == origin].copy()
+        
+        # Sample with replacement
+        duplicated = origin_df.sample(n=needed, replace=True, random_state=42)
+        duplicated["augmented"] = True
+        duplicated["augmentation_method"] = "duplication"
+        
+        augmented_rows.append(duplicated)
+    
+    # Combine original and augmented data
+    if augmented_rows:
+        augmented_df = pd.concat(augmented_rows, ignore_index=True)
+        df = pd.concat([df, augmented_df], ignore_index=True)
+        df["augmented"] = df["augmented"].fillna(False)
+        log(f"Total duplicated samples added: {len(augmented_df)}")
+    else:
+        log("No augmented samples generated", "WARNING")
+        df["augmented"] = False
+    
+    # Final distribution
+    final_counts = Counter(df[df["direct_origin"].notna()]["direct_origin"])
+    log(f"Final distribution: {dict(final_counts)}")
+    
+    return df
+
+def augment_by_inflection(df, jar_path, strategy="upsample", target_count=None, 
+                          max_inflections_per_word=5, batch_size=100):
     """
     Augment dataset by generating inflections for underrepresented origins.
     """
     if "direct_origin" not in df.columns:
         raise ValueError("DataFrame must have 'direct_origin' column")
     
-    log("Starting dataset augmentation")
+    log("Starting inflection-based augmentation")
     
     # Get distribution
     origin_counts = Counter(df[df["direct_origin"].notna()]["direct_origin"])
@@ -419,6 +489,7 @@ def augment_dataset(df, jar_path, strategy="upsample", target_count=None,
                     new_row = sample_row.copy()
                     new_row[word_col] = inflection
                     new_row["augmented"] = True
+                    new_row["augmentation_method"] = "inflection"
                     new_row["source_word"] = word
                     
                     augmented_rows.append(new_row)
@@ -457,14 +528,23 @@ def main():
                        help="Random seed for train/dev/test split")
     
     # Augmentation
-    parser.add_argument("--augment", action="store_true")
-    parser.add_argument("--jar-path", default="morphology.jar")
+    parser.add_argument("--augment", action="store_true",
+                       help="Enable data augmentation")
+    parser.add_argument("--augment-method", 
+                       choices=["inflection", "duplication"],
+                       default="inflection",
+                       help="Augmentation method: inflection (generate word forms) or duplication (oversample)")
+    parser.add_argument("--jar-path", default="morphology.jar",
+                       help="Path to morphology JAR (required for inflection method)")
     parser.add_argument("--augment-strategy", choices=["upsample", "balance"],
-                       default="upsample")
-    parser.add_argument("--target-count", type=int)
-    parser.add_argument("--max-inflections", type=int, default=5)
+                       default="upsample",
+                       help="upsample: match max class, balance: average across classes")
+    parser.add_argument("--target-count", type=int,
+                       help="Target sample count per origin (overrides strategy)")
+    parser.add_argument("--max-inflections", type=int, default=5,
+                       help="Max inflections per word (inflection method only)")
     parser.add_argument("--batch-size", type=int, default=100,
-                       help="Number of words per batch for inflection")
+                       help="Batch size for inflection (inflection method only)")
     
     args = parser.parse_args()
 
@@ -551,22 +631,31 @@ def main():
 
     # Augmentation
     if args.augment:
-        if not Path(args.jar_path).exists():
-            log(f"JAR not found: {args.jar_path}", "ERROR")
-            return
-        
         log("=" * 60)
-        log("STARTING DATA AUGMENTATION")
+        log(f"STARTING DATA AUGMENTATION (method: {args.augment_method})")
         log("=" * 60)
         
-        df = augment_dataset(
-            df,
-            args.jar_path,
-            strategy=args.augment_strategy,
-            target_count=args.target_count,
-            max_inflections_per_word=args.max_inflections,
-            batch_size=args.batch_size
-        )
+        if args.augment_method == "inflection":
+            if not Path(args.jar_path).exists():
+                log(f"JAR not found: {args.jar_path}", "ERROR")
+                return
+            
+            df = augment_by_inflection(
+                df,
+                args.jar_path,
+                strategy=args.augment_strategy,
+                target_count=args.target_count,
+                max_inflections_per_word=args.max_inflections,
+                batch_size=args.batch_size
+            )
+        elif args.augment_method == "duplication":
+            df = augment_by_duplication(
+                df,
+                strategy=args.augment_strategy,
+                target_count=args.target_count
+            )
+        
+        stats["augmentation_method"] = args.augment_method
 
     log(f"Saving to {args.output}")
     df.to_csv(args.output, index=False)
