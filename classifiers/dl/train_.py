@@ -1,7 +1,9 @@
 import readline
 import argparse
 from pathlib import Path
+import random
 
+import numpy as np
 import torch
 import pandas as pd
 
@@ -54,6 +56,19 @@ from classifiers.dl.output_ import (
 from classifiers.dl.torch_config import (
     device
 )
+
+def set_seed(seed):
+    """Set seeds for reproducibility."""
+    random.seed(seed)
+    np.random.seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed) # for multi-GPU, use manual_seed(seed) for single GPU
+        # Optional: For deterministic algorithms, can sometimes slow down training
+        # but ensures more exact reproducibility.
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False # Disables auto-tuning for specific ops
+        # which can sometimes introduce non-determinism
+    return torch.manual_seed(seed)
 
 def run_epoch(model, loader, criterion, optimizer, device, train=False):
 
