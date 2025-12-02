@@ -1,286 +1,614 @@
 """
-visualize_results.py - Generate training and test result visualizations
-Usage: python visualize_results.py <output_dir>
+visualize_results.py - Generate training, test, and model architecture visualizations
+
+Usage: 
+    python visualize_results.py <output_dir>
+    python visualize_results.py <output_dir> --viz-method torchinfo
+    python visualize_results.py <output_dir> --checkpoint path/to/model.pt
 """
 
 import argparse
 from pathlib import Path
+from typing import Optional, Callable, Tuple
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
+import torch
+import torch.nn as nn
+from torch.utils.tensorboard import SummaryWriter
 
-# Set style
+# Matplotlib config
 sns.set_style("whitegrid")
-plt.rcParams['figure.dpi'] = 300
-plt.rcParams['savefig.bbox'] = 'tight'
-plt.rcParams['font.size'] = 10
+plt.rcParams.update({
+    'figure.dpi': 300,
+    'savefig.bbox': 'tight',
+    'font.size': 10
+})
 
+
+# ============================================================================
+# Utilities
+# ============================================================================
+
+def safe_import(module_name: str, package: str = None):
+    """Safely import with helpful error message."""
+    try:
+        if package:
+            return __import__(module_name, fromlist=[package])
+        return __import__(module_name)
+    except ImportError:
+        print(f"Warning: {module_name} not installed")
+        print(f"Install with: pip install {module_name}")
+        return None
+
+
+def recreate_model(checkpoint: dict, load_weights: bool = True):
+    """Recreate model from checkpoint."""
+    from classifiers.dl.models_ import create_model
+    
+    model_config = checkpoint['model_config']
+    task_config = checkpoint['task_config']
+    
+    # CharLM encoder handling
+    charlm_encoder = None
+    if model_config.use_charlm:
+        print("Warning: CharLM encoder not loaded (requires separate file)")
+    
+    model = create_model(model_config, task_config, charlm_encoder)
+    
+    if load_weights:
+        model.load_state_dict(checkpoint['model_state'])
+    
+    model.eval()
+    return model
+
+
+def create_dummy_input(checkpoint: dict, batch_size: int = 4):
+    """Create dummy input for model."""
+    model_config = checkpoint['model_config']
+    train_config = checkpoint['train_config']
+    seq_len = train_config.max_seq_len
+    
+    if model_config.use_byt5:
+        return torch.randn(batch_size, seq_len, model_config.byt5_dim)
+    else:
+        return torch.randint(0, model_config.vocab_size, (batch_size, seq_len))
+
+
+def find_best_checkpoint(output_dir: Path) -> Optional[Path]:
+    """Auto-find best checkpoint in models/ directory."""
+    models_dir = output_dir / "models"
+    if not models_dir.exists():
+        return None
+    
+    checkpoints = list(models_dir.glob("*.pt"))
+    if not checkpoints:
+        return None
+    
+    # Find checkpoint with lowest loss in filename
+    return min(
+        checkpoints,
+        key=lambda p: float(p.stem.split('loss')[-1]) 
+        if 'loss' in p.stem else float('inf')
+    )
+
+
+# ============================================================================
+# Training & Test Metrics Visualization
+# ============================================================================
 
 def plot_training_curves(metrics_df: pd.DataFrame, output_path: Path):
-    """Plot training/dev loss and learning rate over epochs."""
-    
+    """Plot training/dev loss and learning rate."""
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
     
-    # Loss curves
     epochs = metrics_df['epoch']
-    ax1.plot(epochs, metrics_df['train_loss'], label='Train Loss', 
+    
+    # Loss curves
+    ax1.plot(epochs, metrics_df['train_loss'], label='Train', 
              linewidth=2, marker='o', markersize=3, alpha=0.7)
-    ax1.plot(epochs, metrics_df['dev_loss'], label='Dev Loss', 
+    ax1.plot(epochs, metrics_df['dev_loss'], label='Dev', 
              linewidth=2, marker='s', markersize=3, alpha=0.7)
     
     # Mark best epoch
     best_idx = metrics_df['dev_loss'].idxmin()
     best_epoch = metrics_df.loc[best_idx, 'epoch']
     best_loss = metrics_df.loc[best_idx, 'dev_loss']
-    ax1.axvline(best_epoch, color='red', linestyle='--', alpha=0.5, 
-                label=f'Best (Epoch {best_epoch})')
+    ax1.axvline(best_epoch, color='red', linestyle='--', alpha=0.5)
     ax1.plot(best_epoch, best_loss, 'r*', markersize=15, 
-             label=f'Min Dev Loss: {best_loss:.4f}')
+             label=f'Best: {best_loss:.4f}')
     
     ax1.set_ylabel('Loss')
-    ax1.set_title('Training and Validation Loss', fontsize=12, fontweight='bold')
-    ax1.legend(loc='best')
-    ax1.grid(True, alpha=0.3)
+    ax1.set_title('Training & Validation Loss', fontweight='bold')
+    ax1.legend()
+    ax1.grid(alpha=0.3)
     
     # Learning rate
     ax2.plot(epochs, metrics_df['learning_rate'], 
              linewidth=2, color='green', marker='o', markersize=3)
     ax2.set_xlabel('Epoch')
     ax2.set_ylabel('Learning Rate')
-    ax2.set_title('Learning Rate Schedule', fontsize=12, fontweight='bold')
+    ax2.set_title('Learning Rate Schedule', fontweight='bold')
     ax2.set_yscale('log')
-    ax2.grid(True, alpha=0.3)
+    ax2.grid(alpha=0.3)
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300)
     plt.close()
-    print(f"Saved training curves to {output_path}")
+    print(f"✓ Saved training curves to {output_path}")
 
 
-def plot_binary_metrics(metrics_df: pd.DataFrame, output_path: Path):
-    """Plot binary classification metrics as bar chart."""
-    
+def plot_metrics_bar(metrics: dict, output_path: Path, title: str):
+    """Generic bar plot for metrics."""
     fig, ax = plt.subplots(figsize=(8, 6))
     
-    metrics = ['accuracy', 'precision', 'recall', 'f1']
-    values = [float(metrics_df[m].iloc[0]) for m in metrics]
+    names = list(metrics.keys())
+    values = list(metrics.values())
+    colors = sns.color_palette("husl", len(names))
     
-    colors = sns.color_palette("husl", len(metrics))
-    bars = ax.bar(metrics, values, color=colors, alpha=0.8, edgecolor='black')
+    bars = ax.bar(names, values, color=colors, alpha=0.8, edgecolor='black')
     
-    # Add value labels on bars
+    # Add value labels
     for bar, val in zip(bars, values):
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2., height,
-                f'{val:.3f}',
-                ha='center', va='bottom', fontweight='bold')
+        ax.text(bar.get_x() + bar.get_width()/2., bar.get_height(),
+                f'{val:.3f}', ha='center', va='bottom', fontweight='bold')
     
     ax.set_ylim(0, 1.0)
     ax.set_ylabel('Score')
-    ax.set_title('Binary Classification Test Metrics', 
-                 fontsize=14, fontweight='bold')
-    ax.grid(True, axis='y', alpha=0.3)
+    ax.set_title(title, fontsize=14, fontweight='bold')
+    ax.grid(axis='y', alpha=0.3)
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300)
     plt.close()
-    print(f"Saved binary metrics to {output_path}")
+    print(f"✓ Saved {title.lower()} to {output_path}")
 
 
-def plot_multiclass_metrics(metrics_df: pd.DataFrame, output_path: Path):
-    """Plot multiclass metrics with per-class breakdown."""
-    
-    # Separate overall accuracy from per-class metrics
-    overall = metrics_df[metrics_df['class'] == 'overall']
-    per_class = metrics_df[metrics_df['class'] != 'overall']
+def plot_binary_metrics(df: pd.DataFrame, output_path: Path):
+    """Plot binary classification metrics."""
+    metrics = {m: float(df[m].iloc[0]) for m in ['accuracy', 'precision', 'recall', 'f1']}
+    plot_metrics_bar(metrics, output_path, "Binary Classification Metrics")
+
+
+def plot_multiclass_metrics(df: pd.DataFrame, output_path: Path):
+    """Plot multiclass metrics."""
+    overall = df[df['class'] == 'overall']
+    per_class = df[df['class'] != 'overall']
     
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
     
     # Overall accuracy
-    acc_val = float(overall['accuracy'].iloc[0])
-    ax1.bar(['Accuracy'], [acc_val], color='skyblue', 
-            alpha=0.8, edgecolor='black', width=0.5)
-    ax1.text(0, acc_val, f'{acc_val:.3f}', 
-             ha='center', va='bottom', fontweight='bold', fontsize=12)
+    acc = float(overall['accuracy'].iloc[0])
+    ax1.bar(['Accuracy'], [acc], color='skyblue', alpha=0.8, edgecolor='black')
+    ax1.text(0, acc, f'{acc:.3f}', ha='center', va='bottom', 
+             fontweight='bold', fontsize=12)
     ax1.set_ylim(0, 1.0)
-    ax1.set_ylabel('Score')
-    ax1.set_title('Overall Test Accuracy', fontsize=12, fontweight='bold')
-    ax1.grid(True, axis='y', alpha=0.3)
+    ax1.set_title('Overall Accuracy', fontweight='bold')
+    ax1.grid(axis='y', alpha=0.3)
     
     # Per-class metrics
     classes = per_class['class'].tolist()
     x = np.arange(len(classes))
     width = 0.25
     
-    precision = [float(v) for v in per_class['precision']]
-    recall = [float(v) for v in per_class['recall']]
-    f1 = [float(v) for v in per_class['f1']]
-    
-    ax2.bar(x - width, precision, width, label='Precision', 
-            alpha=0.8, edgecolor='black')
-    ax2.bar(x, recall, width, label='Recall', 
-            alpha=0.8, edgecolor='black')
-    ax2.bar(x + width, f1, width, label='F1', 
-            alpha=0.8, edgecolor='black')
+    for i, (metric, offset) in enumerate([('precision', -width), 
+                                           ('recall', 0), 
+                                           ('f1', width)]):
+        values = [float(v) for v in per_class[metric]]
+        ax2.bar(x + offset, values, width, label=metric.capitalize(), 
+                alpha=0.8, edgecolor='black')
     
     ax2.set_xlabel('Class')
     ax2.set_ylabel('Score')
-    ax2.set_title('Per-Class Test Metrics', fontsize=12, fontweight='bold')
+    ax2.set_title('Per-Class Metrics', fontweight='bold')
     ax2.set_xticks(x)
     ax2.set_xticklabels(classes, rotation=45, ha='right')
     ax2.legend()
     ax2.set_ylim(0, 1.0)
-    ax2.grid(True, axis='y', alpha=0.3)
+    ax2.grid(axis='y', alpha=0.3)
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300)
     plt.close()
-    print(f"Saved multiclass metrics to {output_path}")
+    print(f"✓ Saved multiclass metrics to {output_path}")
 
 
-def plot_multilabel_metrics(metrics_df: pd.DataFrame, output_path: Path):
-    """Plot multilabel metrics with per-label breakdown."""
-    
+def plot_multilabel_metrics(df: pd.DataFrame, output_path: Path):
+    """Plot multilabel metrics."""
     fig, ax = plt.subplots(figsize=(12, 6))
     
-    labels = metrics_df['label'].tolist()
+    labels = df['label'].tolist()
     x = np.arange(len(labels))
     width = 0.28
     
-    precision = [float(v) for v in metrics_df['precision']]
-    recall = [float(v) for v in metrics_df['recall']]
-    f_beta = [float(v) for v in metrics_df['f_beta']]
+    metrics_data = [
+        ('precision', -width),
+        ('recall', 0),
+        ('f_beta', width)
+    ]
     
-    bars1 = ax.bar(x - width, precision, width, label='Precision', 
-                   alpha=0.8, edgecolor='black')
-    bars2 = ax.bar(x, recall, width, label='Recall', 
-                   alpha=0.8, edgecolor='black')
-    bars3 = ax.bar(x + width, f_beta, width, label='F-beta', 
-                   alpha=0.8, edgecolor='black')
-    
-    # Add value labels
-    for bars in [bars1, bars2, bars3]:
+    for metric, offset in metrics_data:
+        values = [float(v) for v in df[metric]]
+        bars = ax.bar(x + offset, values, width, label=metric.capitalize(), 
+                      alpha=0.8, edgecolor='black')
+        
+        # Add value labels
         for bar in bars:
             height = bar.get_height()
             ax.text(bar.get_x() + bar.get_width()/2., height,
-                    f'{height:.2f}',
-                    ha='center', va='bottom', fontsize=8)
+                    f'{height:.2f}', ha='center', va='bottom', fontsize=8)
     
     ax.set_xlabel('Label')
     ax.set_ylabel('Score')
-    ax.set_title('Multilabel Classification Test Metrics', 
-                 fontsize=14, fontweight='bold')
+    ax.set_title('Multilabel Metrics', fontsize=14, fontweight='bold')
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=45, ha='right')
     ax.legend()
     ax.set_ylim(0, 1.0)
-    ax.grid(True, axis='y', alpha=0.3)
+    ax.grid(axis='y', alpha=0.3)
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300)
     plt.close()
-    print(f"Saved multilabel metrics to {output_path}")
+    print(f"✓ Saved multilabel metrics to {output_path}")
 
 
-
-def detect_task_type(test_metrics_path: Path) -> str:
-    """Infer task type from test metrics CSV structure."""
-    df = pd.read_csv(test_metrics_path)
+def detect_and_plot_test_metrics(test_file: Path, viz_dir: Path, fmt: str):
+    """Auto-detect task type and plot test metrics."""
+    df = pd.read_csv(test_file)
     
+    # Detect task type
     if 'metric' in df.columns:
-        return 'binary'
+        task_type = 'binary'
+        plot_binary_metrics(df, viz_dir / f"test_metrics.{fmt}")
     elif 'class' in df.columns:
-        return 'multiclass'
+        task_type = 'multiclass'
+        plot_multiclass_metrics(df, viz_dir / f"test_metrics.{fmt}")
     elif 'label' in df.columns:
-        return 'multilabel'
+        task_type = 'multilabel'
+        plot_multilabel_metrics(df, viz_dir / f"test_metrics.{fmt}")
     else:
-        raise ValueError("Cannot detect task type from test metrics CSV")
+        raise ValueError("Unknown test metrics format")
+    
+    return task_type
 
+
+# ============================================================================
+# Model Architecture Visualizations
+# ============================================================================
+
+def viz_simple_text(checkpoint: dict, output_path: Path):
+    """Simple text architecture summary."""
+    model = recreate_model(checkpoint)
+    
+    lines = [
+        "=" * 80,
+        "MODEL ARCHITECTURE",
+        "=" * 80,
+        str(model),
+        "",
+        "=" * 80,
+        "PARAMETERS",
+        "=" * 80,
+        f"{'Train':^5} {'Name':<50} {'Shape':<30} {'Count':>12}",
+        "-" * 80,
+    ]
+    
+    total = trainable = 0
+    for name, param in model.named_parameters():
+        count = param.numel()
+        marker = "  ✓  " if param.requires_grad else "  ✗  "
+        lines.append(
+            f"{marker} {name:<50} {str(list(param.shape)):<30} {count:>12,}"
+        )
+        total += count
+        if param.requires_grad:
+            trainable += count
+    
+    lines.extend([
+        "-" * 80,
+        f"Total:     {total:>12,}",
+        f"Trainable: {trainable:>12,}",
+        f"Frozen:    {total - trainable:>12,}",
+        "=" * 80
+    ])
+    
+    output_path.write_text("\n".join(lines), encoding='utf-8')
+    print(f"✓ Saved simple architecture to {output_path}")
+
+
+def viz_torchinfo(checkpoint: dict, output_path: Path):
+    """Detailed torchinfo summary."""
+    torchinfo = safe_import('torchinfo')
+    if not torchinfo:
+        return
+     
+
+    model = recreate_model(checkpoint)
+    train_config = checkpoint['train_config']
+    model_config = checkpoint['model_config']
+
+    
+    # Determine input shape
+    batch_size = 32
+    seq_len = train_config.max_seq_len
+    
+    if model_config.use_byt5:
+        input_size = (batch_size, seq_len, model_config.byt5_dim)
+        dtypes = [torch.float32]
+    else:
+        input_size = (batch_size, seq_len)
+        dtypes = [torch.long]
+    
+    summary = torchinfo.summary(
+        model,
+        input_size=input_size,
+        dtypes=dtypes,
+        col_names=["input_size", "output_size", "num_params", "trainable"],
+        row_settings=["var_names"],
+        verbose=1,
+        depth=5,
+    )
+    
+    output_path.write_text(str(summary), encoding='utf-8')
+    print(f"✓ Saved torchinfo summary to {output_path}")
+    print(summary)
+
+
+def viz_tensorboard(checkpoint: dict, output_dir: Path):
+    """TensorBoard graph export."""
+    model = recreate_model(checkpoint)
+    dummy_input = create_dummy_input(checkpoint)
+    
+    tb_dir = output_dir / 'tensorboard_logs'
+    writer = SummaryWriter(tb_dir)
+    
+    try:
+        writer.add_graph(model, dummy_input)
+        writer.close()
+        print(f"✓ TensorBoard logs saved to {tb_dir}")
+        print(f"  Run: tensorboard --logdir {tb_dir}")
+        print(f"  Open: http://localhost:6006")
+    except Exception as e:
+        print(f"✗ TensorBoard export failed: {e}")
+        writer.close()
+
+
+def viz_onnx(checkpoint: dict, output_dir: Path):
+    """ONNX export for Netron visualization."""
+    model = recreate_model(checkpoint)
+    dummy_input = create_dummy_input(checkpoint, batch_size=1)
+    onnx_path = output_dir / "model.onnx"
+    
+    try:
+        torch.onnx.export(
+            model, dummy_input, onnx_path,
+            export_params=True,
+            opset_version=11,
+            do_constant_folding=True,
+            input_names=['input'],
+            output_names=['output'],
+            dynamic_axes={
+                'input': {0: 'batch_size', 1: 'sequence'},
+                'output': {0: 'batch_size'}
+            }
+        )
+        print(f"✓ ONNX model saved to {onnx_path}")
+        print(f"  Visualize: https://netron.app")
+        print(f"  Or: pip install netron && netron {onnx_path}")
+    except Exception as e:
+        print(f"✗ ONNX export failed: {e}")
+
+
+def viz_profile(checkpoint: dict, output_dir: Path):
+    """PyTorch profiler analysis."""
+    from torch.profiler import profile, ProfilerActivity, record_function
+    
+    model = recreate_model(checkpoint)
+    dummy_input = create_dummy_input(checkpoint, batch_size=32)
+    
+    try:
+        with profile(
+            activities=[ProfilerActivity.CPU],
+            record_shapes=True,
+            profile_memory=True,
+            with_stack=True
+        ) as prof:
+            with record_function("model_inference"):
+                model(dummy_input)
+        
+        # Save results
+        trace_path = output_dir / "trace.json"
+        prof.export_chrome_trace(str(trace_path))
+        
+        profile_table = prof.key_averages().table(
+            sort_by="cpu_time_total", row_limit=-1
+        )
+        (output_dir / "profile.txt").write_text(profile_table, encoding='utf-8')
+        
+        print(f"✓ Profile saved to {output_dir / 'profile.txt'}")
+        print(f"✓ Chrome trace: {trace_path}")
+        print("\nTop 10 operations:")
+        print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+    except Exception as e:
+        print(f"✗ Profiling failed: {e}")
+
+
+def viz_custom_diagram(checkpoint: dict, output_path: Path):
+    """Custom matplotlib architecture diagram."""
+    model_config = checkpoint['model_config']
+    task_config = checkpoint['task_config']
+    
+    fig, ax = plt.subplots(figsize=(10, 12))
+    ax.axis('off')
+    
+    components = []
+    y = 0.95
+    dy = 0.08
+    
+    # Build component list
+    components.append(('Input', f'Sequence ({model_config.vocab_size} vocab)', y, 'lightgreen'))
+    y -= dy
+    
+    # Encoder
+    if model_config.use_byt5:
+        components.append(('ByT5 Encoder', f'dim={model_config.byt5_dim}', y, 'lightyellow'))
+        y -= dy
+        components.append(('Projection', f'{model_config.byt5_dim}→{model_config.embed_dim}', y, 'lightblue'))
+    elif model_config.use_charlm:
+        components.append(('CharLM', f'dim={model_config.charlm_hidden_dim}', y, 'lightyellow'))
+    else:
+        components.append(('Embedding', f'{model_config.vocab_size}→{model_config.embed_dim}', y, 'lightblue'))
+    y -= dy
+    
+    # Main model
+    if model_config.model_type == 'gru':
+        components.append(('BiGRU', f'{model_config.num_layers}×{model_config.hidden_dim}', y, 'lightcoral'))
+    elif model_config.model_type == 'cnn':
+        components.append(('CNN', f'kernels={model_config.kernel_sizes}', y, 'lightcoral'))
+        if model_config.use_batch_norm:
+            y -= dy
+            components.append(('BatchNorm', '', y, 'lightgray'))
+    y -= dy
+    
+    components.append(('Dropout', f'p={model_config.dropout}', y, 'lightgray'))
+    y -= dy
+    
+    # Output
+    out_dim = 1 if task_config.task_type == 'binary' else len(task_config.label_to_idx)
+    components.append(('Output', f'{out_dim} units', y, 'lightgreen'))
+    y -= dy
+    
+    act = {'binary': 'Sigmoid', 'multilabel': 'Sigmoid', 'multiclass': 'Softmax'}.get(
+        task_config.task_type, 'None'
+    )
+    components.append((act, task_config.task_type, y, 'lightyellow'))
+    
+    # Draw
+    for name, desc, y_pos, color in components:
+        rect = plt.Rectangle((0.1, y_pos - 0.03), 0.8, 0.06,
+                              facecolor=color, edgecolor='black', linewidth=2)
+        ax.add_patch(rect)
+        ax.text(0.5, y_pos, name, ha='center', va='center', 
+                fontsize=12, fontweight='bold')
+        if desc:
+            ax.text(0.5, y_pos - 0.015, desc, ha='center', va='center',
+                    fontsize=8, style='italic')
+        
+        # Arrow
+        if components.index((name, desc, y_pos, color)) < len(components) - 1:
+            ax.arrow(0.5, y_pos - 0.04, 0, -0.03,
+                     head_width=0.05, head_length=0.01, fc='black', ec='black')
+    
+    ax.text(0.5, 0.98, f'{model_config.model_type.upper()} Architecture',
+            ha='center', va='top', fontsize=16, fontweight='bold')
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"✓ Saved architecture diagram to {output_path}")
+
+
+# ============================================================================
+# Main
+# ============================================================================
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Visualize training metrics and test results"
+        description="Visualize training, test results, and model architecture"
     )
+    parser.add_argument("output_dir", type=Path, help="Model output directory")
+    parser.add_argument("--checkpoint", type=Path, help="Model checkpoint (.pt)")
+    parser.add_argument("--format", choices=['png', 'pdf', 'svg'], 
+                        default='png', help="Image format")
     parser.add_argument(
-        "output_dir",
-        type=Path,
-        help="Path to model output directory (e.g., is_loanword_gru_20251125_222946/)"
-    )
-    parser.add_argument(
-        "--format",
-        choices=['png', 'pdf', 'svg'],
-        default='png',
-        help="Output image format"
+        "--viz-method",
+        choices=['all', 'simple', 'torchinfo', 'tensorboard', 'onnx', 
+                 'profile', 'diagram', 'none'],
+        default='all',
+        help="Model visualization method"
     )
     args = parser.parse_args()
     
     output_dir = args.output_dir
-    
     if not output_dir.exists():
-        print(f"Error: Directory {output_dir} does not exist")
+        print(f"Error: {output_dir} not found")
         return
     
-    # Load data
-    metrics_file = output_dir / "metrics.csv"
-    test_file = output_dir / "test_metrics.csv"
-    
-    if not metrics_file.exists():
-        print(f"Error: {metrics_file} not found")
-        return
-    
-    if not test_file.exists():
-        print(f"Error: {test_file} not found")
-        return
-    
-    print(f"Loading data from {output_dir}")
-    metrics_df = pd.read_csv(metrics_file)
-    test_df = pd.read_csv(test_file)
-    
-    # Convert string numbers to float
-    metrics_df['train_loss'] = metrics_df['train_loss'].astype(float)
-    metrics_df['dev_loss'] = metrics_df['dev_loss'].astype(float)
-    metrics_df['learning_rate'] = metrics_df['learning_rate'].astype(float)
-    
-    # Detect task type
-    task_type = detect_task_type(test_file)
-    print(f"Detected task type: {task_type}")
-    
-    # Create visualizations directory
     viz_dir = output_dir / "visualizations"
     viz_dir.mkdir(exist_ok=True)
     
-    # Generate plots
-    print("\nGenerating visualizations...")
+    print(f"{'='*80}")
+    print(f"Visualizing: {output_dir}")
+    print(f"{'='*80}\n")
     
-    # Training curves
-    plot_training_curves(
-        metrics_df, 
-        viz_dir / f"training_curves.{args.format}"
-    )
+    # Training metrics
+    metrics_file = output_dir / "metrics.csv"
+    if metrics_file.exists():
+        print("[Training Metrics]")
+        df = pd.read_csv(metrics_file)
+        df = df.astype({'train_loss': float, 'dev_loss': float, 'learning_rate': float})
+        plot_training_curves(df, viz_dir / f"training_curves.{args.format}")
+    else:
+        print("⊘ No training metrics found")
     
     # Test metrics
-    if task_type == "binary":
-        plot_binary_metrics(
-            test_df, 
-            viz_dir / f"test_metrics.{args.format}"
-        )
-    elif task_type == "multiclass":
-        plot_multiclass_metrics(
-            test_df, 
-            viz_dir / f"test_metrics.{args.format}"
-        )
-    elif task_type == "multilabel":
-        plot_multilabel_metrics(
-            test_df, 
-            viz_dir / f"test_metrics.{args.format}"
-        )
+    test_file = output_dir / "test_metrics.csv"
+    if test_file.exists():
+        print("\n[Test Metrics]")
+        task_type = detect_and_plot_test_metrics(test_file, viz_dir, args.format)
+        print(f"  Task type: {task_type}")
+    else:
+        print("\n⊘ No test metrics found")
     
-    print(f"\n✓ All visualizations saved to {viz_dir}")
+    # Model architecture
+
+    breakpoint()
+    if args.viz_method == 'none':
+        print("\n⊘ Skipping model visualization (--viz-method none)")
+    else:
+        checkpoint_path = args.checkpoint or find_best_checkpoint(output_dir)
+        
+        if not checkpoint_path or not checkpoint_path.exists():
+            print("\n⊘ No checkpoint found")
+            print("  Use --checkpoint <path> to specify manually")
+        else:
+            print(f"\n[Model Architecture]")
+            print(f"  Checkpoint: {checkpoint_path.name}")
+            
+            checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
+            
+            # Define visualization methods
+            methods = {
+                'simple': (viz_simple_text, "model_architecture.txt"),
+                'torchinfo': (viz_torchinfo, "model_summary_torchinfo.txt"),
+                'tensorboard': (viz_tensorboard, None),
+                'onnx': (viz_onnx, None),
+                'profile': (viz_profile, None),
+                'diagram': (viz_custom_diagram, f"architecture_diagram.{args.format}"),
+            }
+            
+            # Execute visualizations
+            to_run = methods.items() if args.viz_method == 'all' else [(args.viz_method, methods[args.viz_method])]
+            
+            for name, (func, filename) in to_run:
+                print(f"\n  [{name}]")
+                try:
+                    output_path = viz_dir / filename if filename else viz_dir
+                    func(checkpoint, output_path)
+                except Exception as e:
+                    print(f"  ✗ Failed: {e}")
+    
+    # Summary
+    print(f"\n{'='*80}")
+    print(f"✓ Visualizations saved to: {viz_dir}")
+    print(f"{'='*80}")
     print("\nGenerated files:")
-    print(f"  - training_curves.{args.format}")
-    print(f"  - test_metrics.{args.format}")
-    print(f"  - summary.txt")
+    for f in sorted(viz_dir.iterdir()):
+        prefix = "  📁" if f.is_dir() else "  📄"
+        print(f"{prefix} {f.name}")
 
 
 if __name__ == "__main__":
