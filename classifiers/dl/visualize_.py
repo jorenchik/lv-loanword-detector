@@ -369,31 +369,6 @@ def viz_tensorboard(checkpoint: dict, output_dir: Path):
         writer.close()
 
 
-def viz_onnx(checkpoint: dict, output_dir: Path):
-    """ONNX export for Netron visualization."""
-    model = recreate_model(checkpoint)
-    dummy_input = create_dummy_input(checkpoint, batch_size=1)
-    onnx_path = output_dir / "model.onnx"
-    
-    try:
-        torch.onnx.export(
-            model, dummy_input, onnx_path,
-            export_params=True,
-            opset_version=11,
-            do_constant_folding=True,
-            input_names=['input'],
-            output_names=['output'],
-            dynamic_axes={
-                'input': {0: 'batch_size', 1: 'sequence'},
-                'output': {0: 'batch_size'}
-            }
-        )
-        print(f"✓ ONNX model saved to {onnx_path}")
-        print(f"  Visualize: https://netron.app")
-        print(f"  Or: pip install netron && netron {onnx_path}")
-    except Exception as e:
-        print(f"✗ ONNX export failed: {e}")
-
 
 def viz_profile(checkpoint: dict, output_dir: Path):
     """PyTorch profiler analysis."""
@@ -520,8 +495,7 @@ def main():
                         default='png', help="Image format")
     parser.add_argument(
         "--viz-method",
-        choices=['all', 'simple', 'torchinfo', 'tensorboard', 'onnx', 
-                 'profile', 'diagram', 'none'],
+        choices=['all', 'simple', 'torchinfo', 'tensorboard', 'profile', 'diagram', 'none'],
         default='all',
         help="Model visualization method"
     )
@@ -579,7 +553,6 @@ def main():
                 'simple': (viz_simple_text, "model_architecture.txt"),
                 'torchinfo': (viz_torchinfo, "model_summary_torchinfo.txt"),
                 'tensorboard': (viz_tensorboard, None),
-                'onnx': (viz_onnx, None),
                 'profile': (viz_profile, None),
                 'diagram': (viz_custom_diagram, f"architecture_diagram.{args.format}"),
             }
