@@ -1,12 +1,3 @@
-"""
-visualize_results.py - Generate training, test, and model architecture visualizations
-
-Usage: 
-    python visualize_results.py <output_dir>
-    python visualize_results.py <output_dir> --viz-method torchinfo
-    python visualize_results.py <output_dir> --checkpoint path/to/model.pt
-"""
-
 import argparse
 from pathlib import Path
 from typing import Optional, Callable, Tuple
@@ -17,6 +8,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
+
+from classifiers.dl.models_ import create_model, CharLanguageModel
+
 
 # Matplotlib config
 sns.set_style("whitegrid")
@@ -53,7 +47,16 @@ def recreate_model(checkpoint: dict, load_weights: bool = True):
     # CharLM encoder handling
     charlm_encoder = None
     if model_config.use_charlm:
-        print("Warning: CharLM encoder not loaded (requires separate file)")
+        if "charlm_state" not in checkpoint or "charlm_config" not in checkpoint:
+            print("Warning: Model uses CharLM but checkpoint missing charlm_state/charlm_config")
+        else:
+            charlm_config = checkpoint["charlm_config"]
+            charlm_encoder = CharLanguageModel(charlm_config)
+            charlm_encoder.load_state_dict(checkpoint["charlm_state"])
+            charlm_encoder.eval()
+            for param in charlm_encoder.parameters():
+                param.requires_grad = False
+            print("✓ Loaded CharLM encoder from checkpoint")
     
     model = create_model(model_config, task_config, charlm_encoder)
     
@@ -99,38 +102,30 @@ def find_best_checkpoint(output_dir: Path) -> Optional[Path]:
 # ============================================================================
 
 def plot_training_curves(metrics_df: pd.DataFrame, output_path: Path):
-    """Plot training/dev loss and learning rate."""
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    """Plot training/dev loss curves."""
+    fig, ax = plt.subplots(figsize=(10, 6))
     
     epochs = metrics_df['epoch']
     
     # Loss curves
-    ax1.plot(epochs, metrics_df['train_loss'], label='Train', 
-             linewidth=2, marker='o', markersize=3, alpha=0.7)
-    ax1.plot(epochs, metrics_df['dev_loss'], label='Dev', 
-             linewidth=2, marker='s', markersize=3, alpha=0.7)
+    ax.plot(epochs, metrics_df['train_loss'], label='Train', 
+            linewidth=2, marker='o', markersize=3, alpha=0.7)
+    ax.plot(epochs, metrics_df['dev_loss'], label='Dev', 
+            linewidth=2, marker='s', markersize=3, alpha=0.7)
     
     # Mark best epoch
     best_idx = metrics_df['dev_loss'].idxmin()
     best_epoch = metrics_df.loc[best_idx, 'epoch']
     best_loss = metrics_df.loc[best_idx, 'dev_loss']
-    ax1.axvline(best_epoch, color='red', linestyle='--', alpha=0.5)
-    ax1.plot(best_epoch, best_loss, 'r*', markersize=15, 
-             label=f'Best: {best_loss:.4f}')
-    
-    ax1.set_ylabel('Loss')
-    ax1.set_title('Training & Validation Loss', fontweight='bold')
-    ax1.legend()
-    ax1.grid(alpha=0.3)
-    
-    # Learning rate
-    ax2.plot(epochs, metrics_df['learning_rate'], 
-             linewidth=2, color='green', marker='o', markersize=3)
-    ax2.set_xlabel('Epoch')
-    ax2.set_ylabel('Learning Rate')
-    ax2.set_title('Learning Rate Schedule', fontweight='bold')
-    ax2.set_yscale('log')
-    ax2.grid(alpha=0.3)
+    ax.axvline(best_epoch, color='red', linestyle='--', alpha=0.5)
+    ax.plot(best_epoch, best_loss, 'r*', markersize=15, 
+            label=f'Best (epoch {best_epoch}): {best_loss:.4f}')
+
+    ax.set_xlabel('Epoch')
+    ax.set_ylabel('Loss')
+    ax.set_title('Training & Validation Loss', fontweight='bold', fontsize=14)
+    ax.legend(loc='best')
+    ax.grid(alpha=0.3)
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300)
@@ -565,7 +560,6 @@ def main():
     
     # Model architecture
 
-    breakpoint()
     if args.viz_method == 'none':
         print("\n⊘ Skipping model visualization (--viz-method none)")
     else:

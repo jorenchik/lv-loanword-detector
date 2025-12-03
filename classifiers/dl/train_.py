@@ -1,11 +1,12 @@
 import readline
 import argparse
-from pathlib import Path
 import random
-
-import numpy as np
 import torch
+import json
+import numpy as np
 import pandas as pd
+from pathlib import Path
+from dataclasses import asdict
 
 from torch.utils.data import (
     DataLoader,
@@ -455,6 +456,40 @@ def main():
             }
 
             top_models.add(dev_loss, epoch, checkpoint)
+            
+            # Save human-readable configs alongside best model
+            if dev_loss == best_dev_loss:
+                config_text_path = output_dir / "models" / "best_model_config.txt"
+                with open(config_text_path, 'w') as f:
+                    f.write("=" * 80 + "\n")
+                    f.write("MODEL CONFIGURATION\n")
+                    f.write("=" * 80 + "\n")
+                    f.write(f"Epoch: {epoch}\n")
+                    f.write(f"Dev Loss: {dev_loss:.6f}\n\n")
+                    
+                    f.write("Task Config:\n")
+                    for k, v in asdict(task_config).items():
+                        f.write(f"  {k}: {v}\n")
+                    
+                    f.write("\nModel Config:\n")
+                    for k, v in asdict(model_config).items():
+                        f.write(f"  {k}: {v}\n")
+                    
+                    f.write("\nTrain Config:\n")
+                    for k, v in asdict(train_config).items():
+                        f.write(f"  {k}: {v}\n")
+                
+                # Save as JSON too
+                config_json_path = output_dir / "models" / "best_model_config.json"
+                with open(config_json_path, 'w') as f:
+                    json.dump({
+                        'epoch': epoch,
+                        'dev_loss': dev_loss,
+                        'task_config': asdict(task_config),
+                        'model_config': asdict(model_config),
+                        'train_config': asdict(train_config),
+                    }, f, indent=2)
+
         else:
             patience_left -= 1
             if patience_left == 0:
