@@ -18,13 +18,16 @@ from classifiers.dl.models_ import (
     collect_logits_targets,
     find_best_thresholds,
     CharLanguageModel,
+    evaluate_charlm,
 )
 from classifiers.dl.task_config import TaskConfig
 from classifiers.dl.torch_config import device
 from classifiers.dl.logging_ import log
 from classifiers.dl.data_ import (
     OriginDataset,
-    collate
+    collate,
+    WordDataset,
+    collate_lm,
 )
 
 def tokenize(word: str, char2idx: dict[str, int], unk: int) -> torch.Tensor:
@@ -143,7 +146,6 @@ def interactive_mode(model, task_config, char2idx, unk, max_len, byt5_tokenizer,
         except Exception as exc:
             print(f"Error: {exc}")
 
-# Add this function after format_prediction()
 def charlm_interactive_mode(model, max_len, char2idx, unk, temperature=1.0):
     print("=" * 60)
     print("CharLM Generation Mode")
@@ -165,7 +167,7 @@ def charlm_interactive_mode(model, max_len, char2idx, unk, temperature=1.0):
         except Exception as exc:
             print(f"Error: {exc}")
 
-def charlm_file_mode(model, input_path, output_path, max_len, temperature=1.0):
+def charlm_file_mode(model, input_path, output_path, max_len, char2idx, unk, temperature=1.0):
     prompts = [
         line.strip()
         for line in Path(input_path).read_text(encoding="utf-8").splitlines()
@@ -174,7 +176,7 @@ def charlm_file_mode(model, input_path, output_path, max_len, temperature=1.0):
     results = []
     for prompt in prompts:
         try:
-            generated = model.generate(prompt, max_len=max_len, temperature=temperature)
+            generated = model.generate(prompt, char2idx, unk, max_len=max_len, temperature=temperature)
             results.append({"prompt": prompt, "generated": generated})
         except Exception as e:
             results.append({"prompt": prompt, "generated": f"ERROR: {e}"})
@@ -326,10 +328,10 @@ def main():
             )
             charlm_evaluation_mode(model, eval_loader, task_config, device)
         elif args.interactive:
-            charlm_interactive_mode(model, args.max_gen_len, char2idx, args.temperature)
+            charlm_interactive_mode(model, args.max_gen_len, char2idx, unk, args.temperature)
         elif args.file:
             output_path = Path(args.output) if args.output else None
-            charlm_file_mode(model, args.file, output_path, args.max_gen_len, args.temperature)
+            charlm_file_mode(model, args.file, output_path, args.max_gen_len, char2idx, unk, args.temperature)
         return
 
     # Classification modes (existing logic)
