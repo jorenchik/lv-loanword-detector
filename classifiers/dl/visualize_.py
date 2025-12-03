@@ -17,9 +17,28 @@ sns.set_style("whitegrid")
 plt.rcParams.update({
     'figure.dpi': 300,
     'savefig.bbox': 'tight',
-    'font.size': 10
+    'font.size': 10,
+    'axes.facecolor': 'black',
+    'figure.facecolor': 'black',
+    'text.color': 'white',
+    'axes.labelcolor': 'white',
+    'xtick.color': 'white',
+    'ytick.color': 'white',
+    'grid.color': '#333333',
+    'axes.edgecolor': 'white',
 })
 
+# Color palette for dark backgrounds
+DARK_COLORS = {
+    'primary': '#00D9FF',      # Cyan
+    'secondary': '#FF6B9D',    # Pink
+    'tertiary': '#FFA07A',     # Light salmon
+    'quaternary': '#98FB98',   # Pale green
+    'accent': '#FFD700',       # Gold
+    'train': '#00D9FF',        # Cyan for train
+    'dev': '#FF6B9D',          # Pink for dev
+    'best': '#FFD700',         # Gold for best
+}
 
 # ============================================================================
 # Utilities
@@ -103,46 +122,56 @@ def find_best_checkpoint(output_dir: Path) -> Optional[Path]:
 
 def plot_training_curves(metrics_df: pd.DataFrame, output_path: Path):
     """Plot training/dev loss curves."""
-    fig, ax = plt.subplots(figsize=(10, 6))
+
+    fig, ax = plt.subplots(figsize=(10, 6), facecolor='black')
+    ax.set_facecolor('black')
     
     epochs = metrics_df['epoch']
     
     # Loss curves
-    ax.plot(epochs, metrics_df['train_loss'], label='Train', 
-            linewidth=2, marker='o', markersize=3, alpha=0.7)
-    ax.plot(epochs, metrics_df['dev_loss'], label='Dev', 
-            linewidth=2, marker='s', markersize=3, alpha=0.7)
+    ax.plot(epochs, metrics_df['train_loss'], label='Train',
+            linewidth=2, marker='o', markersize=3, alpha=0.9,
+            color=DARK_COLORS['train'])
+    ax.plot(epochs, metrics_df['dev_loss'], label='Dev',
+            linewidth=2, marker='s', markersize=3, alpha=0.9,
+            color=DARK_COLORS['dev'])
     
     # Mark best epoch
     best_idx = metrics_df['dev_loss'].idxmin()
     best_epoch = metrics_df.loc[best_idx, 'epoch']
     best_loss = metrics_df.loc[best_idx, 'dev_loss']
-    ax.axvline(best_epoch, color='red', linestyle='--', alpha=0.5)
-    ax.plot(best_epoch, best_loss, 'r*', markersize=15, 
+    ax.axvline(best_epoch, color=DARK_COLORS['best'], linestyle='--', alpha=0.5)
+    ax.plot(best_epoch, best_loss, '*', markersize=15,
+            color=DARK_COLORS['best'],
             label=f'Best (epoch {best_epoch}): {best_loss:.4f}')
 
     ax.set_xlabel('Epoch')
     ax.set_ylabel('Loss')
-    ax.set_title('Training & Validation Loss', fontweight='bold', fontsize=14)
     ax.legend(loc='best')
     ax.grid(alpha=0.3)
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300)
+    svg_path = output_path.with_suffix('.svg')
+    plt.savefig(svg_path, format='svg')
+
     plt.close()
     print(f"✓ Saved training curves to {output_path}")
+    print(f"✓ Saved SVG to {svg_path}")
 
 
 def plot_metrics_bar(metrics: dict, output_path: Path, title: str):
     """Generic bar plot for metrics."""
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(8, 6), facecolor='black')
+    ax.set_facecolor('black')
     
     names = list(metrics.keys())
     values = list(metrics.values())
-    colors = sns.color_palette("husl", len(names))
+    # Use grayscale gradient
+    colors = [plt.cm.gray(0.9 - i * 0.2) for i in range(len(names))]
     
-    bars = ax.bar(names, values, color=colors, alpha=0.8, edgecolor='black')
-    
+    bars = ax.bar(names, values, color=colors, alpha=0.9, edgecolor='white', linewidth=1.5)
+ 
     # Add value labels
     for bar, val in zip(bars, values):
         ax.text(bar.get_x() + bar.get_width()/2., bar.get_height(),
@@ -150,13 +179,18 @@ def plot_metrics_bar(metrics: dict, output_path: Path, title: str):
     
     ax.set_ylim(0, 1.0)
     ax.set_ylabel('Score')
-    ax.set_title(title, fontsize=14, fontweight='bold')
     ax.grid(axis='y', alpha=0.3)
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300)
+    svg_path = output_path.with_suffix('.svg')
+    plt.savefig(svg_path, format='svg')
+
     plt.close()
     print(f"✓ Saved {title.lower()} to {output_path}")
+    print(f"✓ Saved metrics to {output_path}")
+    print(f"✓ Saved SVG to {svg_path}")
+
 
 
 def plot_binary_metrics(df: pd.DataFrame, output_path: Path):
@@ -170,15 +204,17 @@ def plot_multiclass_metrics(df: pd.DataFrame, output_path: Path):
     overall = df[df['class'] == 'overall']
     per_class = df[df['class'] != 'overall']
     
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), facecolor='black')
+    ax1.set_facecolor('black')
+    ax2.set_facecolor('black')
     
     # Overall accuracy
     acc = float(overall['accuracy'].iloc[0])
-    ax1.bar(['Accuracy'], [acc], color='skyblue', alpha=0.8, edgecolor='black')
-    ax1.text(0, acc, f'{acc:.3f}', ha='center', va='bottom', 
+    ax1.bar(['Accuracy'], [acc], color=DARK_COLORS['primary'], 
+            alpha=0.9, edgecolor='white', linewidth=1.5)
+    ax1.text(0, acc, f'{acc:.3f}', ha='center', va='bottom',
              fontweight='bold', fontsize=12)
     ax1.set_ylim(0, 1.0)
-    ax1.set_title('Overall Accuracy', fontweight='bold')
     ax1.grid(axis='y', alpha=0.3)
     
     # Per-class metrics
@@ -186,16 +222,18 @@ def plot_multiclass_metrics(df: pd.DataFrame, output_path: Path):
     x = np.arange(len(classes))
     width = 0.25
     
+    metric_colors = [DARK_COLORS['primary'], DARK_COLORS['secondary'], DARK_COLORS['tertiary']]
     for i, (metric, offset) in enumerate([('precision', -width), 
                                            ('recall', 0), 
                                            ('f1', width)]):
         values = [float(v) for v in per_class[metric]]
         ax2.bar(x + offset, values, width, label=metric.capitalize(), 
-                alpha=0.8, edgecolor='black')
+                alpha=0.9, edgecolor='white', linewidth=1.5,
+                color=metric_colors[i])
     
     ax2.set_xlabel('Class')
     ax2.set_ylabel('Score')
-    ax2.set_title('Per-Class Metrics', fontweight='bold')
+    ax2.set_titl'Per-Class Metrics', fontweight='bold')
     ax2.set_xticks(x)
     ax2.set_xticklabels(classes, rotation=45, ha='right')
     ax2.legend()
@@ -204,38 +242,44 @@ def plot_multiclass_metrics(df: pd.DataFrame, output_path: Path):
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300)
+    svg_path = output_path.with_suffix('.svg')
+    plt.savefig(svg_path, format='svg')
     plt.close()
     print(f"✓ Saved multiclass metrics to {output_path}")
+    print(f"✓ Saved SVG to {svg_path}")
 
 
 def plot_multilabel_metrics(df: pd.DataFrame, output_path: Path):
     """Plot multilabel metrics."""
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(12, 6), facecolor='black')
+    ax.set_facecolor('black')
     
     labels = df['label'].tolist()
     x = np.arange(len(labels))
     width = 0.28
     
+    metric_colors = [DARK_COLORS['primary'], DARK_COLORS['secondary'], DARK_COLORS['tertiary']]
     metrics_data = [
         ('precision', -width),
         ('recall', 0),
         ('f_beta', width)
     ]
     
-    for metric, offset in metrics_data:
+    for i, (metric, offset) in enumerate(metrics_data):
         values = [float(v) for v in df[metric]]
         bars = ax.bar(x + offset, values, width, label=metric.capitalize(), 
-                      alpha=0.8, edgecolor='black')
+                      alpha=0.9, edgecolor='white', linewidth=1.5,
+                      color=metric_colors[i])
         
         # Add value labels
         for bar in bars:
             height = bar.get_height()
             ax.text(bar.get_x() + bar.get_width()/2., height,
-                    f'{height:.2f}', ha='center', va='bottom', fontsize=8)
+                    f'{height:.2f}', ha='center', va='bottom', fontsize=8,
+                    color='white')
     
     ax.set_xlabel('Label')
     ax.set_ylabel('Score')
-    ax.set_title('Multilabel Metrics', fontsize=14, fontweight='bold')
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=45, ha='right')
     ax.legend()
@@ -244,9 +288,11 @@ def plot_multilabel_metrics(df: pd.DataFrame, output_path: Path):
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300)
+    svg_path = output_path.with_suffix('.svg')
+    plt.savefig(svg_path, format='svg')
     plt.close()
     print(f"✓ Saved multilabel metrics to {output_path}")
-
+    print(f"✓ Saved SVG to {svg_path}")
 
 def detect_and_plot_test_metrics(test_file: Path, viz_dir: Path, fmt: str):
     """Auto-detect task type and plot test metrics."""
@@ -403,82 +449,92 @@ def viz_profile(checkpoint: dict, output_dir: Path):
     except Exception as e:
         print(f"✗ Profiling failed: {e}")
 
-
 def viz_custom_diagram(checkpoint: dict, output_path: Path):
     """Custom matplotlib architecture diagram."""
     model_config = checkpoint['model_config']
     task_config = checkpoint['task_config']
     
-    fig, ax = plt.subplots(figsize=(10, 12))
+    fig, ax = plt.subplots(figsize=(10, 12), facecolor='black')
     ax.axis('off')
+    ax.set_facecolor('black')
     
     components = []
     y = 0.95
     dy = 0.08
     
+    # Grayscale color scheme for dark background
+    box_colors = {
+        'input': '#404040',
+        'encoder': '#606060',
+        'layer': '#707070',
+        'special': '#505050',
+        'output': '#808080',
+    }
+    
     # Build component list
-    components.append(('Input', f'Sequence ({model_config.vocab_size} vocab)', y, 'lightgreen'))
+    components.append(('Input', f'Sequence ({model_config.vocab_size} vocab)', y, box_colors['input']))
     y -= dy
     
     # Encoder
     if model_config.use_byt5:
-        components.append(('ByT5 Encoder', f'dim={model_config.byt5_dim}', y, 'lightyellow'))
+        components.append(('ByT5 Encoder', f'dim={model_config.byt5_dim}', y, box_colors['encoder']))
         y -= dy
-        components.append(('Projection', f'{model_config.byt5_dim}→{model_config.embed_dim}', y, 'lightblue'))
+        components.append(('Projection', f'{model_config.byt5_dim}→{model_config.embed_dim}', y, box_colors['layer']))
     elif model_config.use_charlm:
-        components.append(('CharLM', f'dim={model_config.charlm_hidden_dim}', y, 'lightyellow'))
+        components.append(('CharLM', f'dim={model_config.charlm_hidden_dim}', y, box_colors['encoder']))
     else:
-        components.append(('Embedding', f'{model_config.vocab_size}→{model_config.embed_dim}', y, 'lightblue'))
+        components.append(('Embedding', f'{model_config.vocab_size}→{model_config.embed_dim}', y, box_colors['layer']))
     y -= dy
     
     # Main model
     if model_config.model_type == 'gru':
-        components.append(('BiGRU', f'{model_config.num_layers}×{model_config.hidden_dim}', y, 'lightcoral'))
+        components.append(('BiGRU', f'{model_config.num_layers}×{model_config.hidden_dim}', y, box_colors['layer']))
     elif model_config.model_type == 'cnn':
-        components.append(('CNN', f'kernels={model_config.kernel_sizes}', y, 'lightcoral'))
+        components.append(('CNN', f'kernels={model_config.kernel_sizes}', y, box_colors['layer']))
         if model_config.use_batch_norm:
             y -= dy
-            components.append(('BatchNorm', '', y, 'lightgray'))
+            components.append(('BatchNorm', '', y, box_colors['special']))
     y -= dy
     
-    components.append(('Dropout', f'p={model_config.dropout}', y, 'lightgray'))
+    components.append(('Dropout', f'p={model_config.dropout}', y, box_colors['special']))
     y -= dy
     
     # Output
     out_dim = 1 if task_config.task_type == 'binary' else len(task_config.label_to_idx)
-    components.append(('Output', f'{out_dim} units', y, 'lightgreen'))
+    components.append(('Output', f'{out_dim} units', y, box_colors['output']))
     y -= dy
     
     act = {'binary': 'Sigmoid', 'multilabel': 'Sigmoid', 'multiclass': 'Softmax'}.get(
         task_config.task_type, 'None'
     )
-    components.append((act, task_config.task_type, y, 'lightyellow'))
+    components.append((act, task_config.task_type, y, box_colors['encoder']))
     
     # Draw
     for name, desc, y_pos, color in components:
         rect = plt.Rectangle((0.1, y_pos - 0.03), 0.8, 0.06,
-                              facecolor=color, edgecolor='black', linewidth=2)
+                              facecolor=color, edgecolor='white', linewidth=2)
         ax.add_patch(rect)
         ax.text(0.5, y_pos, name, ha='center', va='center', 
-                fontsize=12, fontweight='bold')
+                fontsize=12, fontweight='bold', color='white')
         if desc:
             ax.text(0.5, y_pos - 0.015, desc, ha='center', va='center',
-                    fontsize=8, style='italic')
+                    fontsize=8, style='italic', color='lightgray')
         
         # Arrow
         if components.index((name, desc, y_pos, color)) < len(components) - 1:
             ax.arrow(0.5, y_pos - 0.04, 0, -0.03,
-                     head_width=0.05, head_length=0.01, fc='black', ec='black')
+                     head_width=0.05, head_length=0.01, fc='white', ec='white')
     
-    ax.text(0.5, 0.98, f'{model_config.model_type.upper()} Architecture',
-            ha='center', va='top', fontsize=16, fontweight='bold')
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    svg_path = output_path.with_suffix('.svg')
+    plt.savefig(svg_path, format='svg', bbox_inches='tight')
     plt.close()
     print(f"✓ Saved architecture diagram to {output_path}")
+    print(f"✓ Saved SVG to {svg_path}")
 
 
 # ============================================================================
