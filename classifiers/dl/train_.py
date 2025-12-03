@@ -256,7 +256,7 @@ def main():
         charlm_hidden_dim=charlm_hidden_dim,
     )
     train_config = TrainConfig(
-        batch_size=64,
+        batch_size=512,
         learning_rate=1e-5,
         weight_decay=1e-3,
         num_epochs=1000,
