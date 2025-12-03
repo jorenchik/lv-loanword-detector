@@ -8,3 +8,4 @@ plan.md
 /.idea/
 /gui_integration/packaged_models/*.pkl
 **/*.html
+.venv
