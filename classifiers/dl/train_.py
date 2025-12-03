@@ -228,11 +228,17 @@ def main():
     # Initialize CharLM encoder if requested.
     charlm_encoder = None
     charlm_hidden_dim = None
+    charlm_checkpoint = None
     if args.charlm_encoder:
         log.info(f"Loading CharLM encoder: {args.charlm_encoder}")
-        charlm_encoder, charlm_hidden_dim = load_charlm_encoder(
-            args.charlm_encoder, device, freeze=not args.charlm_finetune
-        )
+        charlm_checkpoint = torch.load(args.charlm_encoder, map_location=device, weights_only=False)
+        charlm_config = charlm_checkpoint["model_config"]
+        charlm_encoder = CharLanguageModel(charlm_config).to(device)
+        charlm_encoder.load_state_dict(charlm_checkpoint["model_state"])
+        if not args.charlm_finetune:
+            for param in charlm_encoder.parameters():
+                param.requires_grad = False
+        charlm_hidden_dim = charlm_config.hidden_dim
         log.info(f"CharLM hidden dim: {charlm_hidden_dim}")
 
     # Configs
@@ -442,6 +448,8 @@ def main():
                 "model_hash": compute_model_hash(model),
                 "char2idx": char2idx,
                 "byt5_model": args.byt5_model if args.use_byt5 else None,
+                "charlm_state": charlm_encoder.state_dict() if charlm_encoder else None,
+                "charlm_config": checkpoint.get("model_config") if charlm_encoder else None,
                 "thresholds": best_t,
             }
 
@@ -455,7 +463,7 @@ def main():
     # Reload the model.
     best_model_path = top_models.get_best_path()
     log.info(f"Loading best model from: {best_model_path}")
-    model, checkpoint, _ = load_model(best_model_path, charlm_encoder)
+    model, checkpoint, _ = load_model(best_model_path, None)
     task_config = checkpoint["task_config"]
     thresholds = checkpoint["thresholds"]
 

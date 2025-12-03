@@ -322,6 +322,16 @@ def get_loss_fn(
 def load_model(model_file, charlm_encoder):
     checkpoint = torch.load(model_file, map_location=device, weights_only=False)
 
+    # Load CharLM from checkpoint if present and not already provided
+    if checkpoint["model_config"].use_charlm and charlm_encoder is None:
+        if "charlm_state" not in checkpoint or "charlm_config" not in checkpoint:
+            raise ValueError("Model uses CharLM but checkpoint missing charlm_state/charlm_config")
+        charlm_config = checkpoint["charlm_config"]
+        charlm_encoder = CharLanguageModel(charlm_config).to(device)
+        charlm_encoder.load_state_dict(checkpoint["charlm_state"])
+        for param in charlm_encoder.parameters():
+            param.requires_grad = False
+
     byt5_tokenizer = None
     if checkpoint["model_config"].use_byt5:
         byt5_model_name = checkpoint.get("byt5_model", "google/byt5-small")

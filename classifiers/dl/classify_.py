@@ -274,7 +274,6 @@ def evaluation_mode(model, task_config, eval_loader, thresholds):
 def main():
     parser = argparse.ArgumentParser(description="Predict/generate using trained models.")
     parser.add_argument("model", help="Path to model .pt file")
-    parser.add_argument("--charlm", help="Path to CharLM encoder (if required)", type=str)
     
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("-i", "--interactive", action="store_true", help="Interactive mode")
@@ -298,10 +297,14 @@ def main():
     # Load CharLM encoder if needed
     charlm_encoder = None
     if model_config.use_charlm:
-        if not args.charlm:
-            raise ValueError("Model requires CharLM encoder. Use --charlm path/to/charlm.pt")
-        log.info(f"Loading CharLM encoder from {args.charlm}")
-        charlm_encoder, _ = load_charlm_encoder(args.charlm, device, freeze=True)
+        if "charlm_state" not in raw_ckpt or "charlm_config" not in raw_ckpt:
+            raise ValueError("Model uses CharLM but checkpoint doesn't contain CharLM state")
+        log.info("Loading CharLM encoder from checkpoint")
+        charlm_config = raw_ckpt["charlm_config"]
+        charlm_encoder = CharLanguageModel(charlm_config).to(device)
+        charlm_encoder.load_state_dict(raw_ckpt["charlm_state"])
+        for param in charlm_encoder.parameters():
+            param.requires_grad = False
 
     model, checkpoint, byt5_tokenizer = load_model(args.model, charlm_encoder)
     
