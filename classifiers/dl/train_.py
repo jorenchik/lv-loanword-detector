@@ -242,6 +242,11 @@ def main():
                 param.requires_grad = False
         charlm_hidden_dim = charlm_config.hidden_dim
         log.info(f"CharLM hidden dim: {charlm_hidden_dim}")
+    else:
+        charlm_checkpoint = None
+        charlm_config = None
+        charlm_encoder = None
+        charlm_hidden_dim = None
 
     # Configs
     task_config = TASKS[args.task]
@@ -309,7 +314,7 @@ def main():
 
         # Split the dataset
         n = len(dataset)
-        g = torch.Generator().manual_seed(42)
+        g = set_seed(42)
         n_train = int(n * 0.8)
         n_dev = int(n * 0.1)
         n_test = n - n_train - n_dev
