@@ -233,7 +233,6 @@ def plot_multiclass_metrics(df: pd.DataFrame, output_path: Path):
     
     ax2.set_xlabel('Class')
     ax2.set_ylabel('Score')
-    ax2.set_titl'Per-Class Metrics', fontweight='bold')
     ax2.set_xticks(x)
     ax2.set_xticklabels(classes, rotation=45, ha='right')
     ax2.legend()
