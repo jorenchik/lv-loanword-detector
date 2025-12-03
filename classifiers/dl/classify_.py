@@ -17,6 +17,7 @@ from classifiers.dl.models_ import (
     evaluate_multiclass,
     collect_logits_targets,
     find_best_thresholds,
+    CharLanguageModel,
 )
 from classifiers.dl.task_config import TaskConfig
 from classifiers.dl.torch_config import device

@@ -30,6 +30,7 @@ from classifiers.dl.models_ import (
     evaluate_multiclass,
     load_charlm_encoder,
     ByT5Tokenizer,
+    CharLanguageModel,
 )
 from classifiers.dl.model_config import (
     ModelConfig,
@@ -449,7 +450,7 @@ def main():
                 "char2idx": char2idx,
                 "byt5_model": args.byt5_model if args.use_byt5 else None,
                 "charlm_state": charlm_encoder.state_dict() if charlm_encoder else None,
-                "charlm_config": checkpoint.get("model_config") if charlm_encoder else None,
+                "charlm_config": charlm_config,
                 "thresholds": best_t,
             }
 
